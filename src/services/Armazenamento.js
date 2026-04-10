@@ -13,6 +13,7 @@ const CHAVES = {
   historico: "rat:historico",
   pontuacao: "rat:pontuacao",
   streak: "rat:streak",
+  inventario: "rat:inventario", // itens já comprados
 };
 
 //funções externas────────────────────────────────────────────────────────────────────────
@@ -264,4 +265,34 @@ export async function checarNovasConquistas() {
   }
 
   return novasConquistasNestaSessao;
+}
+
+
+
+// logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
+export async function comprarItem(item) {
+  try {
+    const pontosAtuais = await carregarPontuacao();
+    
+    // verifica se tem dinheiro
+    if (pontosAtuais < item.preco) {
+      return { sucesso: false, erro: "Pontos insuficientes!" };
+    }
+
+    // carrega o inventário e adiciona o item
+    const inventario = await carregar(CHAVES.inventario, []);
+    
+    if (inventario.find(i => i.id === item.id)) {
+      return { sucesso: false, erro: "Você já possui este item!" };
+    }
+
+    const novoInventario = [...inventario, item.id];
+    
+    await salvarPontuacao(pontosAtuais - item.preco);
+    await salvar(CHAVES.inventario, novoInventario);
+
+    return { sucesso: true, novoSaldo: pontosAtuais - item.preco };
+  } catch (e) {
+    return { sucesso: false, erro: "Erro ao processar compra." };
+  }
 }

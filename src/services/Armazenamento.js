@@ -1,19 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Chaves de armazenamento
-// ─────────────────────────────────────────────────────────────────────────────
-
+// chaves de armazenamento para organizar os dados salvos no celular
 const CHAVES = {
   progresso: "rat:progresso",
   objetivos: "rat:objetivos",
   historico: "rat:historico",
   pontuacao: "rat:pontuacao",
+  streak: "rat:streak",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Funções internas de apoio (não exportadas)
-// ─────────────────────────────────────────────────────────────────────────────
+//funções externas────────────────────────────────────────────────────────────────────────
 
 // Converte qualquer valor em texto e salva no armazenamento local.
 async function salvar(chave, valor) {
@@ -137,12 +133,7 @@ export async function removerPontuacao() {
   await remover(CHAVES.pontuacao);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Reset completo
-// Apaga TODOS os dados do usuário de uma vez.
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Apaga todos os dados salvos pelo app de uma só vez.
+// reset completo (nao pode ser desfeito, cuidado ao usar)
 export async function limparDadosDoUsuario() {
   try {
     await AsyncStorage.multiRemove(Object.values(CHAVES));
@@ -150,4 +141,82 @@ export async function limparDadosDoUsuario() {
     console.error("[storageService] Erro ao limpar dados do usuário:", error);
     throw error;
   }
+}
+
+
+// lógica de Histórico e Impacto
+
+export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos) {
+  try {
+    // carrega o histórico que já existe (na primeira vez, retorna uma lista vazia))
+    const historicoAtual = await carregar(CHAVES.historico, []);
+
+    // registro datado
+    const novoRegistro = {
+      id: Date.now().toString(), // ID time-based
+      acao: acaoNome,
+      pontos: pontosGanhos,
+      data: new Date().toISOString(), // formato: 2026-04-10T
+    };
+
+    const novoHistorico = [novoRegistro, ...historicoAtual];
+
+    await salvar(CHAVES.historico, novoHistorico);
+
+    const pontuacaoAntiga = await carregarPontuacao();
+    await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao registrar ação:", error);
+    return false;
+  }
+  // atualizar o streak
+  await atualizarStreak();
+}
+
+
+// lógica do streak
+export async function atualizarStreak() {
+  try {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0); // compara apenas datas, verificar com o grupo se é melhor considerar o horário
+
+    const dadosStreak = await carregar(CHAVES.streak, { 
+      contagem: 0, 
+      ultimaData: null 
+    });
+
+    if (!dadosStreak.ultimaData) {
+      // primeira vez
+      const novoStreak = { contagem: 1, ultimaData: hoje.toISOString() };
+      await salvar(CHAVES.streak, novoStreak);
+      return novoStreak;
+    }
+
+    const ultimaData = new Date(dadosStreak.ultimaData);
+    ultimaData.setHours(0, 0, 0, 0);
+
+    const diferencaDias = (hoje - ultimaData) / (1000 * 60 * 60 * 24);
+
+    let novaContagem = dadosStreak.contagem;
+
+    if (diferencaDias === 1) {
+      novaContagem += 1;
+    } else if (diferencaDias > 1) {
+      novaContagem = 1;
+    } 
+
+    const novoStreak = { contagem: novaContagem, ultimaData: hoje.toISOString() };
+    await salvar(CHAVES.streak, novoStreak);
+    return novoStreak;
+
+  } catch (error) {
+    console.error("Erro ao atualizar streak:", error);
+    return { contagem: 0, ultimaData: null };
+  }
+}
+
+export async function carregarStreak() {
+  return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
 }

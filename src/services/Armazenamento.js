@@ -13,6 +13,7 @@ const CHAVES = {
   pontuacao: "rat:pontuacao",
   streak: "rat:streak",
   inventario: "rat:inventario", // itens já comprados
+  conquistas: "rat:conquistas",
 };
 
 //funções externas────────────────────────────────────────────────────────────────────────
@@ -43,7 +44,7 @@ async function carregar(chave, valorPadrao = null) {
 }
 
 // Apaga o valor de uma chave específica do armazenamento local.
-async function remover(chave) {
+async function apagar(chave) {
   try {
     await AsyncStorage.removeItem(chave);
   } catch (error) {
@@ -59,7 +60,7 @@ async function remover(chave) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Recebe um objeto com o progresso atual e salva.
-export async function salvarProgresso(progresso) {
+export async function salvarNovoProgresso(progresso) {
   await salvar(CHAVES.progresso, progresso);
 }
 
@@ -70,8 +71,8 @@ export async function carregarProgresso() {
 }
 
 // Apaga o progresso salvo.
-export async function removerProgresso() {
-  await remover(CHAVES.progresso);
+export async function apagarProgresso() {
+  await apagar(CHAVES.progresso);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -80,8 +81,7 @@ export async function removerProgresso() {
 // Exemplo de array esperado: ["andar", "nao usar ar-condicionado", "sei la"]
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um array com os objetivos do dia e salva.
-export async function salvarObjetivosAtuais(objetivos) {
+export async function substituirObjetivos(objetivos) {
   await salvar(CHAVES.objetivos, objetivos);
 }
 
@@ -93,7 +93,7 @@ export async function carregarObjetivosAtuais() {
 
 // Apaga os objetivos do dia salvos.
 export async function removerObjetivosAtuais() {
-  await remover(CHAVES.objetivos);
+  await apagar(CHAVES.objetivos);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ export async function carregarHistorico() {
 
 // Apaga o histórico salvo.
 export async function removerHistorico() {
-  await remover(CHAVES.historico);
+  await apagar(CHAVES.historico);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ export async function carregarPontuacao() {
 
 // Apaga a pontuação salva.
 export async function removerPontuacao() {
-  await remover(CHAVES.pontuacao);
+  await apagar(CHAVES.pontuacao);
 }
 
 // reset completo (nao pode ser desfeito, cuidado ao usar)
@@ -234,7 +234,7 @@ import { conquistas } from "../data/conquistas";
 export async function checarNovasConquistas() {
   const historico = await carregarHistorico();
   const streak = await carregarStreak();
-  const conquistasJaGanhas = await carregar(CHAVES.progresso, { ganhas: [] });
+  const conquistasJaGanhas = await carregar(CHAVES.conquistas, { ganhas: [] });
 
   let novasConquistasNestaSessao = [];
 
@@ -292,3 +292,41 @@ export async function comprarItem(item) {
     return { sucesso: false, erro: "Erro ao processar compra." };
   }
 }
+
+export async function salvarItemNoInventario(item) {
+  const inventarioAtual = await carregarInventario();
+  const inventarioNovo = [...inventarioAtual, item];
+  await salvar(CHAVES.inventario, inventarioNovo);
+}
+
+export async function removerItemDoInventario(item) {
+  // checagem para ver se o item sequer está no inventário
+  const itemNoInventario = await checarItemNoInventario(item);
+  // se estiver continua, se não estiver para a função
+  if (!itemNoInventario) {
+    return { sucesso: false, erro: "Item não encontrado no inventário." };
+  }
+
+  const inventarioAtual = await carregarInventario();
+  //cria um novo inventario
+  const inventarioNovo = [];
+
+  // para todo item dentro do inventario se for diferente do item a ser removido é adicionado no novo inventario
+  for (let i = 0; i < inventarioAtual.length; i++) {
+    if (inventarioAtual[i].id !== item.id) {
+      inventarioNovo.push(inventarioAtual[i]);
+    }
+  }
+  // substitui inventario antigo pelo novo
+  await salvar(CHAVES.inventario, inventarioNovo);
+
+  return { sucesso: true, erro: false };
+}
+
+export async function limparInventario() {
+  await salvar(CHAVES.inventario, []);
+}
+
+export async function carregarConquistasGanhas() {}
+export async function usuarioPossuiConquista() {}
+export async function limparConquistas() {}

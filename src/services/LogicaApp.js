@@ -2,6 +2,8 @@
 
 // aqui fica a lógica de negócio do app, o que acontece quando o usuário completa uma atividade,
 
+
+
 import { adicionarAcaoAoHistorico, carregarPontuacao, salvarPontuacao } from './Armazenamento';
 import { atualizarStreak } from './Armazenamento';
 

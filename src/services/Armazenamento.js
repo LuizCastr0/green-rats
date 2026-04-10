@@ -173,13 +173,15 @@ export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos) {
     const pontuacaoAntiga = await carregarPontuacao();
     await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
 
+    // atualizar o streak
+    await atualizarStreak();
+
     return true;
   } catch (error) {
     console.error("Erro ao registrar ação:", error);
     return false;
   }
-  // atualizar o streak
-  await atualizarStreak();
+  
 }
 
 

@@ -1,3 +1,4 @@
+// src/data/categorias.js
 // Categorias fixas
 
 export const categorias = [

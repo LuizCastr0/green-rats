@@ -1,3 +1,5 @@
+// src/data/atividades.js
+
 // Atividades pré-carregadas aos usuários.
 // Apenas os dados fixos de cada atividade.
 // Informações de estado do usuário (favoritas, concluídas hoje, etc.) não ficam aqui (services)

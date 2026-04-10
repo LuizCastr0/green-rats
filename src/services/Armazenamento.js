@@ -3,7 +3,6 @@
 // arquivo responsável por toda a lógica de armazenamento local do app, usando AsyncStorage para guardar os dados no celular do usuário
 // vai ficar desorganizado no começo, mas a ideia é ir melhorando e organizando conforme o desenvolvimento do app avança
 
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // chaves de armazenamento para organizar os dados salvos no celular
@@ -150,7 +149,6 @@ export async function limparDadosDoUsuario() {
   }
 }
 
-
 // lógica de Histórico e Impacto
 
 export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos) {
@@ -181,9 +179,7 @@ export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos) {
     console.error("Erro ao registrar ação:", error);
     return false;
   }
-  
 }
-
 
 // lógica do streak
 export async function atualizarStreak() {
@@ -191,9 +187,9 @@ export async function atualizarStreak() {
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0); // compara apenas datas, verificar com o grupo se é melhor considerar o horário
 
-    const dadosStreak = await carregar(CHAVES.streak, { 
-      contagem: 0, 
-      ultimaData: null 
+    const dadosStreak = await carregar(CHAVES.streak, {
+      contagem: 0,
+      ultimaData: null,
     });
 
     if (!dadosStreak.ultimaData) {
@@ -214,12 +210,14 @@ export async function atualizarStreak() {
       novaContagem += 1;
     } else if (diferencaDias > 1) {
       novaContagem = 1;
-    } 
+    }
 
-    const novoStreak = { contagem: novaContagem, ultimaData: hoje.toISOString() };
+    const novoStreak = {
+      contagem: novaContagem,
+      ultimaData: hoje.toISOString(),
+    };
     await salvar(CHAVES.streak, novoStreak);
     return novoStreak;
-
   } catch (error) {
     console.error("Erro ao atualizar streak:", error);
     return { contagem: 0, ultimaData: null };
@@ -230,10 +228,8 @@ export async function carregarStreak() {
   return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
 }
 
-
-
 // sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
-import { conquistas } from '../data/conquistas';
+import { conquistas } from "../data/conquistas";
 
 export async function checarNovasConquistas() {
   const historico = await carregarHistorico();
@@ -242,16 +238,15 @@ export async function checarNovasConquistas() {
 
   let novasConquistasNestaSessao = [];
 
-  conquistas.forEach(c => {
+  conquistas.forEach((c) => {
     // ignora se ja ganhou essa conquista antes
     if (conquistasJaGanhas.ganhas.includes(c.id)) return;
 
     let alcancou = false;
 
-    if (c.tipo === 'total_acoes') {
+    if (c.tipo === "total_acoes") {
       alcancou = historico.length >= c.objetivo;
-    } 
-    else if (c.tipo === 'max_streak') {
+    } else if (c.tipo === "max_streak") {
       alcancou = streak.contagem >= c.objetivo;
     }
     // se necessario, adcionar mais filtros
@@ -269,13 +264,11 @@ export async function checarNovasConquistas() {
   return novasConquistasNestaSessao;
 }
 
-
-
 // logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
 export async function comprarItem(item) {
   try {
     const pontosAtuais = await carregarPontuacao();
-    
+
     // verifica se tem dinheiro
     if (pontosAtuais < item.preco) {
       return { sucesso: false, erro: "Pontos insuficientes!" };
@@ -283,18 +276,19 @@ export async function comprarItem(item) {
 
     // carrega o inventário e adiciona o item
     const inventario = await carregar(CHAVES.inventario, []);
-    
-    if (inventario.find(i => i.id === item.id)) {
+
+    if (inventario.find((i) => i.id === item.id)) {
       return { sucesso: false, erro: "Você já possui este item!" };
     }
 
-    const novoInventario = [...inventario, item.id];
-    
+    const novoInventario = [...inventario, item];
+
     await salvarPontuacao(pontosAtuais - item.preco);
     await salvar(CHAVES.inventario, novoInventario);
 
     return { sucesso: true, novoSaldo: pontosAtuais - item.preco };
-  } catch (e) {
+  } catch (error) {
+    console.error("Erro ao processar compra:", error);
     return { sucesso: false, erro: "Erro ao processar compra." };
   }
 }

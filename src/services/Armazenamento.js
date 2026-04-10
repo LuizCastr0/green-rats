@@ -1,3 +1,9 @@
+// src/services/Armazenamento.js
+
+// arquivo responsável por toda a lógica de armazenamento local do app, usando AsyncStorage para guardar os dados no celular do usuário
+// vai ficar desorganizado no começo, mas a ideia é ir melhorando e organizando conforme o desenvolvimento do app avança
+
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 // chaves de armazenamento para organizar os dados salvos no celular
@@ -219,4 +225,43 @@ export async function atualizarStreak() {
 
 export async function carregarStreak() {
   return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+}
+
+
+
+// sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
+import { conquistas } from '../data/conquistas';
+
+export async function checarNovasConquistas() {
+  const historico = await carregarHistorico();
+  const streak = await carregarStreak();
+  const conquistasJaGanhas = await carregar(CHAVES.progresso, { ganhas: [] });
+
+  let novasConquistasNestaSessao = [];
+
+  conquistas.forEach(c => {
+    // ignora se ja ganhou essa conquista antes
+    if (conquistasJaGanhas.ganhas.includes(c.id)) return;
+
+    let alcancou = false;
+
+    if (c.tipo === 'total_acoes') {
+      alcancou = historico.length >= c.objetivo;
+    } 
+    else if (c.tipo === 'max_streak') {
+      alcancou = streak.contagem >= c.objetivo;
+    }
+    // se necessario, adcionar mais filtros
+
+    if (alcancou) {
+      conquistasJaGanhas.ganhas.push(c.id);
+      novasConquistasNestaSessao.push(c);
+    }
+  });
+
+  if (novasConquistasNestaSessao.length > 0) {
+    await salvar(CHAVES.progresso, conquistasJaGanhas);
+  }
+
+  return novasConquistasNestaSessao;
 }

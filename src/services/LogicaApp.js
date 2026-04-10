@@ -7,21 +7,24 @@
 import { adicionarAcaoAoHistorico, carregarPontuacao, salvarPontuacao } from './Armazenamento';
 import { atualizarStreak } from './Armazenamento';
 
+
 export const registrarAtividadeCompleta = async (atividade) => {
   try {
-    // salva no histórico e já soma os pontos automaticamente
+    // salva ação e pontos
     await adicionarAcaoAoHistorico(atividade.titulo, atividade.pontos);
 
-    // 2. Valida o Streak (se é um novo dia, etc)
-    const novoStreak = await atualizarStreak();
+    // atualiza streak
+    const streakInfo = await atualizarStreak();
+
+    // checa se isso desbloqueou algum troféu
+    const conquistasDesbloqueadas = await checarNovasConquistas();
 
     return { 
       sucesso: true, 
-      novoStreak: novoStreak.contagem,
-      // Você pode retornar mais coisas para o front fazer brilhar na tela
+      novoStreak: streakInfo.contagem,
+      novosTrofeus: conquistasDesbloqueadas  // isso pode ser uma lista de conquistas que o usuário acabou de ganhar, para mostrar uma notificação
     };
   } catch (error) {
-    console.error("Falha na operação mestre:", error);
     return { sucesso: false };
   }
 };

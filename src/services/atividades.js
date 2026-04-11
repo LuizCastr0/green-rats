@@ -211,7 +211,7 @@ export async function carregarAtividadesConcluidas() {
   return statusSalvo.ids;
 }
 
-export async function atividadeJaFoiConcluidaHoje(idDaAtividade) {
+export async function checarAtividadeJaFoiConcluidaHoje(idDaAtividade) {
   const concluidasHoje = await carregarAtividadesConcluidas();
   return concluidasHoje.includes(idDaAtividade);
 }

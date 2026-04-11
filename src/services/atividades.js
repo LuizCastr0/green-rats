@@ -10,8 +10,8 @@ import { atividades } from "../data/atividades";
 
 const C = {
   atividadesPersonalizadas: "rat:atividadesPersonalizadas",
-  atividadesFavoritas: "rat:favoritas",
-  atividadesConcluidasHoje: "rat:concluidasHoje",
+  atividadesFavoritas: "rat:atividadesFavoritas",
+  atividadesConcluidas: "rat:atividadesConcluidas",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,40 +185,40 @@ export async function removerFavoritas() {
 
 // Retorna a lista de ids concluídos hoje.
 // Se não houver nada salvo, retorna [].
-export async function carregarConcluidasHoje() {
-  return carregar(C.atividadesConcluidasHoje, []);
+export async function carregarAtividadesConcluidas() {
+  return carregar(C.atividadesConcluidas, []);
 }
 
 // Marca uma atividade como concluída hoje.
 export async function marcarAtividadeComoConcluida(idDaAtividade) {
-  const concluidasHoje = await carregarConcluidasHoje();
+  const concluidasHoje = await carregarAtividadesConcluidas();
 
   if (concluidasHoje.includes(idDaAtividade)) {
     return concluidasHoje;
   }
 
   const novaLista = [...concluidasHoje, idDaAtividade];
-  await salvar(C.atividadesConcluidasHoje, novaLista);
+  await salvar(C.atividadesConcluidas, novaLista);
 
   return novaLista;
 }
 
 // Remove uma atividade da lista de concluídas hoje.
 export async function desmarcarAtividadeConcluida(idDaAtividade) {
-  const concluidasHoje = await carregarConcluidasHoje();
+  const concluidasHoje = await carregarAtividadesConcluidas();
 
   const novaLista = concluidasHoje.filter((id) => {
     return id !== idDaAtividade;
   });
 
-  await salvar(C.atividadesConcluidasHoje, novaLista);
+  await salvar(C.atividadesConcluidas, novaLista);
 
   return novaLista;
 }
 
 // Apaga toda a lista de concluídas hoje.
 export async function removerConcluidasHoje() {
-  await remover(C.atividadesConcluidasHoje);
+  await remover(C.atividadesConcluidas);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -232,7 +232,7 @@ export async function limparDadosDeAtividades() {
     await AsyncStorage.multiRemove([
       C.atividadesPersonalizadas,
       C.atividadesFavoritas,
-      C.atividadesConcluidasHoje,
+      C.atividadesConcluidas,
     ]);
   } catch (error) {
     console.error(

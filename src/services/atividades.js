@@ -11,7 +11,7 @@ import { atividades } from "../data/atividades";
 const C = {
   atividadesPersonalizadas: "rat:atividadesPersonalizadas",
   atividadesFavoritas: "rat:atividadesFavoritas",
-  atividadesConcluidas: "rat:atividadesConcluidas",
+  atividadesConcluidasHoje: "rat:atividadesConcluidasHoje",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -49,6 +49,16 @@ async function remover(chave) {
     console.error(`[atividadesService] Erro ao remover "${chave}":`, error);
     throw error;
   }
+}
+
+function getChaveDoDia() {
+  const hoje = new Date();
+
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  const dia = String(hoje.getDate()).padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -178,47 +188,88 @@ export async function removerFavoritas() {
   await remover(C.atividadesFavoritas);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Concluídas hoje
-// Guarda apenas os ids das atividades concluídas no dia
-// ─────────────────────────────────────────────────────────────────────────────
-
-// Retorna a lista de ids concluídos hoje.
-// Se não houver nada salvo, retorna [].
+// Carrega as atividades concluídas de hoje e zera a lista automaticamente se o dia mudou.
+// { data: "2026-04-11", ids: ["atividade-1", "atividade-2"] }
 export async function carregarAtividadesConcluidas() {
-  return carregar(C.atividadesConcluidas, []);
-}
+  const hoje = getChaveDoDia();
 
-// Marca uma atividade como concluída hoje.
-export async function marcarAtividadeComoConcluida(idDaAtividade) {
-  const concluidasHoje = await carregarAtividadesConcluidas();
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
 
-  if (concluidasHoje.includes(idDaAtividade)) {
-    return concluidasHoje;
+  if (statusSalvo.data !== hoje) {
+    const novoStatus = {
+      data: hoje,
+      ids: [],
+    };
+
+    await salvar(C.atividadesConcluidasHoje, novoStatus);
+    return novoStatus.ids;
   }
 
-  const novaLista = [...concluidasHoje, idDaAtividade];
-  await salvar(C.atividadesConcluidas, novaLista);
-
-  return novaLista;
+  return statusSalvo.ids;
 }
 
-// Remove uma atividade da lista de concluídas hoje.
-export async function desmarcarAtividadeConcluida(idDaAtividade) {
+export async function atividadeJaFoiConcluidaHoje(idDaAtividade) {
   const concluidasHoje = await carregarAtividadesConcluidas();
+  return concluidasHoje.includes(idDaAtividade);
+}
 
-  const novaLista = concluidasHoje.filter((id) => {
+// Marca uma atividade como concluída no dia atual.
+export async function marcarAtividadeComoConcluida(idDaAtividade) {
+  const hoje = getChaveDoDia();
+
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
+
+  let statusAtual = statusSalvo;
+
+  if (statusSalvo.data !== hoje) {
+    statusAtual = {
+      data: hoje,
+      ids: [],
+    };
+  }
+
+  if (statusAtual.ids.includes(idDaAtividade)) {
+    return statusAtual.ids;
+  }
+
+  statusAtual.ids.push(idDaAtividade);
+
+  await salvar(C.atividadesConcluidasHoje, statusAtual);
+
+  return statusAtual.ids;
+}
+
+// Remove uma atividade da lista de concluídas do dia atual.
+export async function desmarcarAtividadeConcluida(idDaAtividade) {
+  const hoje = getChaveDoDia();
+
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
+
+  let statusAtual = statusSalvo;
+
+  if (statusSalvo.data !== hoje) {
+    statusAtual = {
+      data: hoje,
+      ids: [],
+    };
+  }
+
+  statusAtual.ids = statusAtual.ids.filter((id) => {
     return id !== idDaAtividade;
   });
 
-  await salvar(C.atividadesConcluidas, novaLista);
+  await salvar(C.atividadesConcluidasHoje, statusAtual);
 
-  return novaLista;
-}
-
-// Apaga toda a lista de concluídas hoje.
-export async function removerConcluidasHoje() {
-  await remover(C.atividadesConcluidas);
+  return statusAtual.ids;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,13 +277,13 @@ export async function removerConcluidasHoje() {
 // Remove todos os dados relacionados às atividades
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Apaga atividades personalizadas, favoritas e concluídas.
+// Apaga atividades personalizadas, favoritas e o controle de concluídas do dia.
 export async function limparDadosDeAtividades() {
   try {
     await AsyncStorage.multiRemove([
       C.atividadesPersonalizadas,
       C.atividadesFavoritas,
-      C.atividadesConcluidas,
+      C.atividadesConcluidasHoje,
     ]);
   } catch (error) {
     console.error(

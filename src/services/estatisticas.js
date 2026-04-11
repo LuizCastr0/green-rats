@@ -1,6 +1,5 @@
 // scr/services/estatisticas.js
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   carregarPontuacao,
   carregarStreak,

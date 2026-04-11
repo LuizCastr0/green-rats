@@ -238,7 +238,7 @@ export async function carregarConquistasGanhas() {
 export async function checarNovasConquistas() {
   const historico = await carregarHistorico();
   const streak = await carregarStreak();
-  const conquistasJaGanhas = await carregarConquistasGanhas;
+  const conquistasJaGanhas = await carregarConquistasGanhas();
 
   let novasConquistasNestaSessao = [];
 
@@ -364,12 +364,11 @@ export async function tamanhoDoInventario() {
 
 export async function checarConquista(conquista) {
   const conquistasAtuais = await carregarConquistasGanhas();
-  const conquistaParaChecar = conquistasAtuais.find(
-    (i) => i.id === conquista.id,
-  );
-  if (conquistaParaChecar) {
+
+  if (conquistasAtuais.ganhas.includes(conquista.id)) {
     return true;
   }
+
   return false;
 }
 

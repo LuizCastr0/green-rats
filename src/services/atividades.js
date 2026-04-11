@@ -226,7 +226,7 @@ export async function removerConcluidasHoje() {
 // Remove todos os dados relacionados às atividades
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Apaga atividades personalizadas, favoritas e concluídas hoje.
+// Apaga atividades personalizadas, favoritas e concluídas.
 export async function limparDadosDeAtividades() {
   try {
     await AsyncStorage.multiRemove([

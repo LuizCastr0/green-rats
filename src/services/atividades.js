@@ -1,3 +1,5 @@
+// src/services/atividades.js
+
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { categorias } from "../data/categorias";
 import { atividades } from "../data/atividades";
@@ -8,8 +10,8 @@ import { atividades } from "../data/atividades";
 
 const C = {
   atividadesPersonalizadas: "rat:atividadesPersonalizadas",
-  favoritas: "rat:favoritas",
-  concluidasHoje: "rat:concluidasHoje",
+  atividadesFavoritas: "rat:favoritas",
+  atividadesConcluidasHoje: "rat:concluidasHoje",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -141,7 +143,7 @@ export async function filtrarAtividadesPorCategoria(idDaCategoria) {
 // Retorna a lista de ids favoritos.
 // Se não houver nada salvo, retorna [].
 export async function carregarFavoritas() {
-  return carregar(C.favoritas, []);
+  return carregar(C.atividadesFavoritas, []);
 }
 
 // Marca uma atividade como favorita.
@@ -153,7 +155,7 @@ export async function favoritarAtividade(idDaAtividade) {
   }
 
   const novaLista = [...favoritas, idDaAtividade];
-  await salvar(C.favoritas, novaLista);
+  await salvar(C.atividadesFavoritas, novaLista);
 
   return novaLista;
 }
@@ -166,14 +168,14 @@ export async function desfavoritarAtividade(idDaAtividade) {
     return id !== idDaAtividade;
   });
 
-  await salvar(C.favoritas, novaLista);
+  await salvar(C.atividadesFavoritas, novaLista);
 
   return novaLista;
 }
 
 // Apaga toda a lista de favoritas.
 export async function removerFavoritas() {
-  await remover(C.favoritas);
+  await remover(C.atividadesFavoritas);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -184,7 +186,7 @@ export async function removerFavoritas() {
 // Retorna a lista de ids concluídos hoje.
 // Se não houver nada salvo, retorna [].
 export async function carregarConcluidasHoje() {
-  return carregar(C.concluidasHoje, []);
+  return carregar(C.atividadesConcluidasHoje, []);
 }
 
 // Marca uma atividade como concluída hoje.
@@ -196,7 +198,7 @@ export async function marcarAtividadeComoConcluida(idDaAtividade) {
   }
 
   const novaLista = [...concluidasHoje, idDaAtividade];
-  await salvar(C.concluidasHoje, novaLista);
+  await salvar(C.atividadesConcluidasHoje, novaLista);
 
   return novaLista;
 }
@@ -209,14 +211,14 @@ export async function desmarcarAtividadeConcluida(idDaAtividade) {
     return id !== idDaAtividade;
   });
 
-  await salvar(C.concluidasHoje, novaLista);
+  await salvar(C.atividadesConcluidasHoje, novaLista);
 
   return novaLista;
 }
 
 // Apaga toda a lista de concluídas hoje.
 export async function removerConcluidasHoje() {
-  await remover(C.concluidasHoje);
+  await remover(C.atividadesConcluidasHoje);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,8 +231,8 @@ export async function limparDadosDeAtividades() {
   try {
     await AsyncStorage.multiRemove([
       C.atividadesPersonalizadas,
-      C.favoritas,
-      C.concluidasHoje,
+      C.atividadesFavoritas,
+      C.atividadesConcluidasHoje,
     ]);
   } catch (error) {
     console.error(

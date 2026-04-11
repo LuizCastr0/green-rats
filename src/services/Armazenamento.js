@@ -231,10 +231,14 @@ export async function carregarStreak() {
 // sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
 import { conquistas } from "../data/conquistas";
 
+export async function carregarConquistasGanhas() {
+  return carregar(CHAVES.conquistas, { ganhas: [] });
+}
+
 export async function checarNovasConquistas() {
   const historico = await carregarHistorico();
   const streak = await carregarStreak();
-  const conquistasJaGanhas = await carregar(CHAVES.conquistas, { ganhas: [] });
+  const conquistasJaGanhas = await carregarConquistasGanhas;
 
   let novasConquistasNestaSessao = [];
 
@@ -258,10 +262,24 @@ export async function checarNovasConquistas() {
   });
 
   if (novasConquistasNestaSessao.length > 0) {
-    await salvar(CHAVES.progresso, conquistasJaGanhas);
+    await salvar(CHAVES.conquistas, conquistasJaGanhas);
   }
 
   return novasConquistasNestaSessao;
+}
+
+export async function carregarInventario() {
+  return carregar(CHAVES.inventario, []);
+}
+
+export async function checarItemNoInventario(item) {
+  const inventarioAtual = await carregarInventario();
+  const itemParaEncontrar = inventarioAtual.find((i) => i.id === item.id);
+
+  if (itemParaEncontrar) {
+    return true;
+  }
+  return false;
 }
 
 // logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
@@ -274,14 +292,17 @@ export async function comprarItem(item) {
       return { sucesso: false, erro: "Pontos insuficientes!" };
     }
 
-    // carrega o inventário e adiciona o item
-    const inventario = await carregar(CHAVES.inventario, []);
-
-    if (inventario.find((i) => i.id === item.id)) {
+    // verifica se o item ja foi comprado
+    const itemJaExiste = await checarItemNoInventario(item);
+    if (itemJaExiste) {
       return { sucesso: false, erro: "Você já possui este item!" };
     }
 
-    const novoInventario = [...inventario, item];
+    // carrega o inventário
+    const inventarioAtual = await carregarInventario();
+
+    //adiciona o item
+    const novoInventario = [...inventarioAtual, item];
 
     await salvarPontuacao(pontosAtuais - item.preco);
     await salvar(CHAVES.inventario, novoInventario);
@@ -323,10 +344,35 @@ export async function removerItemDoInventario(item) {
   return { sucesso: true, erro: false };
 }
 
+export async function buscarItemPorId(idDoItem) {
+  const inventarioAtual = await carregarInventario();
+  const itemExiste = inventarioAtual.find((i) => i.id === idDoItem);
+  if (itemExiste) {
+    return itemExiste;
+  }
+  return null;
+}
+
 export async function limparInventario() {
   await salvar(CHAVES.inventario, []);
 }
 
-export async function carregarConquistasGanhas() {}
-export async function usuarioPossuiConquista() {}
-export async function limparConquistas() {}
+export async function tamanhoDoInventario() {
+  const inventarioAtual = await carregarInventario();
+  return inventarioAtual.length;
+}
+
+export async function checarConquista(conquista) {
+  const conquistasAtuais = await carregarConquistasGanhas();
+  const conquistaParaChecar = conquistasAtuais.find(
+    (i) => i.id === conquista.id,
+  );
+  if (conquistaParaChecar) {
+    return true;
+  }
+  return false;
+}
+
+export async function limparConquistas() {
+  await apagar(CHAVES.conquistas);
+}

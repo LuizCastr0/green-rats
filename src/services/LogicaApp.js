@@ -9,14 +9,15 @@ import {
 } from "./Armazenamento";
 
 import {
-  atividadeJaFoiConcluidaHoje,
+  checarAtividadeJaFoiConcluidaHoje,  // era atividadeJaFoiConcluidaHoje
   marcarAtividadeComoConcluida,
 } from "./atividades";
 
 export async function registrarAtividadeCompleta(atividade) {
   try {
     // verifica se essa atividade já foi concluída hoje
-    const jaFoiConcluidaHoje = await atividadeJaFoiConcluidaHoje(atividade.id);
+    const jaFoiConcluidaHoje = await checarAtividadeJaFoiConcluidaHoje(atividade.id);
+
 
     if (jaFoiConcluidaHoje) {
       return {
@@ -29,10 +30,8 @@ export async function registrarAtividadeCompleta(atividade) {
     await marcarAtividadeComoConcluida(atividade.id);
 
     // registra no histórico e soma os pontos da atividade
-    await adicionarAcaoAoHistorico(
-      atividade.titulo,
-      Number(atividade.pontos) || 0,
-    );
+    await adicionarAcaoAoHistorico(atividade.titulo, Number(atividade.pontos) || 0, atividade.id);
+
 
     // pega o streak já atualizado
     const streakInfo = await carregarStreak();
@@ -55,3 +54,16 @@ export async function registrarAtividadeCompleta(atividade) {
     };
   }
 }
+
+export const calcularNovoStreak = (ultimaData, streakAtual) => {
+  const hoje = new Date().toDateString();
+  const ultima = new Date(ultimaData).toDateString();
+
+  // Se a última interação foi ontem, incrementa
+  const ontem = new Date();
+  ontem.setDate(ontem.getDate() - 1);
+
+  if (ultima === hoje) return streakAtual; // Mesmo dia, não faz nada
+  if (ultima === ontem.toDateString()) return streakAtual + 1; // Streak continua
+  return 1; // Perdeu o streak, reinicia em 1
+};

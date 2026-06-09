@@ -1,32 +1,32 @@
 import os
 from pathlib import Path
 
-def gerar_arvore(diretorio, ignorar="", prefixo=""):
+def gerar_arvore(diretorio, pastas_ignoradas, prefixo=""):
     path = Path(diretorio)
     
-    # Lista e filtra o conteúdo (ignora a pasta escolhida e arquivos ocultos comuns)
     try:
-        # Pega todos os itens e remove o que deve ser ignorado
-        itens = sorted([item for item in path.iterdir() if item.name != ignorar])
+        itens = sorted([
+            item for item in path.iterdir() 
+            if item.name not in pastas_ignoradas and not item.name.startswith('.')
+        ])
     except PermissionError:
-        return # Pula pastas que o Python não tem permissão de ler
+        return
 
     for i, item in enumerate(itens):
-        extensao = "└── " if i == len(itens) - 1 else "├── "
+        # 🟢 Trocado para caracteres simples que não quebram o Code Runner
+        extensao = "|__ " if i == len(itens) - 1 else "|-- "
         print(f"{prefixo}{extensao}{item.name}")
 
         if item.is_dir():
-            # Define o novo recuo visual
-            proximo_prefixo = prefixo + ("    " if i == len(itens) - 1 else "│   ")
-            # Chamada recursiva
-            gerar_arvore(item, ignorar, proximo_prefixo)
+            # 🟢 Ajustado o espaçamento simples
+            proximo_prefixo = prefixo + ("    " if i == len(itens) - 1 else "|   ")
+            gerar_arvore(item, pastas_ignoradas, proximo_prefixo)
 
 if __name__ == "__main__":
     raiz = os.getcwd()
     print(f"Estrutura de: {raiz}")
     
-    # Exemplo: se digitar 'venv' ou '.git', ele não entrará nessas pastas
-    pasta_para_pular = input("node_modules").strip()
+    bloqueados = ["node_modules", ".git", "__pycache__", ".next", "dist", ".expo", ".vscode"]
     
     print(".")
-    gerar_arvore(raiz, ignorar=pasta_para_pular)
+    gerar_arvore(raiz, pastas_ignoradas=bloqueados)

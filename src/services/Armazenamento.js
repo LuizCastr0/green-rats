@@ -151,27 +151,24 @@ export async function limparDadosDoUsuario() {
 
 // lógica de Histórico e Impacto
 
-export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos) {
+export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtividade = null) {
   try {
-    // carrega o histórico que já existe (na primeira vez, retorna uma lista vazia))
     const historicoAtual = await carregar(CHAVES.historico, []);
 
-    // registro datado
     const novoRegistro = {
-      id: Date.now().toString(), // ID time-based
+      id: Date.now().toString(),
+      idAtividade,           // ← campo novo, necessário para conquistas por id
       acao: acaoNome,
       pontos: pontosGanhos,
-      data: new Date().toISOString(), // formato: 2026-04-10T
+      data: new Date().toISOString(),
     };
 
     const novoHistorico = [novoRegistro, ...historicoAtual];
-
     await salvar(CHAVES.historico, novoHistorico);
 
     const pontuacaoAntiga = await carregarPontuacao();
     await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
 
-    // atualizar o streak
     await atualizarStreak();
 
     return true;
@@ -242,18 +239,36 @@ export async function checarNovasConquistas() {
 
   let novasConquistasNestaSessao = [];
 
+  // monta um Set com todos os ids de atividades já feitas (para lookup rápido)
+  const idsFeitos = new Set(historico.map(item => item.idAtividade).filter(Boolean));
+
+  // monta um contador de quantas vezes cada atividade foi feita
+  const contagemPorId = {};
+  historico.forEach(item => {
+    if (item.idAtividade) {
+      contagemPorId[item.idAtividade] = (contagemPorId[item.idAtividade] || 0) + 1;
+    }
+  });
+
   conquistas.forEach((c) => {
-    // ignora se ja ganhou essa conquista antes
     if (conquistasJaGanhas.ganhas.includes(c.id)) return;
 
     let alcancou = false;
 
     if (c.tipo === "total_acoes") {
       alcancou = historico.length >= c.objetivo;
+
     } else if (c.tipo === "max_streak") {
       alcancou = streak.contagem >= c.objetivo;
+
+    } else if (c.tipo === "acoes_ids") {
+      // verifica se todos os ids necessários já foram feitos pelo menos uma vez
+      alcancou = c.idsNecessarios.every(id => idsFeitos.has(id));
+
+    } else if (c.tipo === "contagem_acao") {
+      // verifica se uma atividade específica foi feita X vezes
+      alcancou = (contagemPorId[c.idAlvo] || 0) >= c.objetivo;
     }
-    // se necessario, adcionar mais filtros
 
     if (alcancou) {
       conquistasJaGanhas.ganhas.push(c.id);
@@ -374,4 +389,82 @@ export async function checarConquista(conquista) {
 
 export async function limparConquistas() {
   await apagar(CHAVES.conquistas);
+}
+
+// ─── DEV TOOLS (não usar em produção) ────────────────────────────────────────
+
+export async function resetarTudo() {
+  try {
+    await AsyncStorage.clear();
+  } catch (error) {
+    console.error('[dev] Erro ao resetar tudo:', error);
+    throw error;
+  }
+}
+
+export async function simularViradaDia() {
+  try {
+    const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+    const objetivosHoje = await carregarObjetivosAtuais();
+
+    const streakAnterior = dadosStreak.contagem;
+    const teveAtividade = objetivosHoje.length > 0;
+
+    // Calcula nova data (ontem + 1 dia a partir da ultimaData, ou amanhã a partir de hoje)
+    const baseData = dadosStreak.ultimaData
+      ? new Date(dadosStreak.ultimaData)
+      : new Date();
+    baseData.setDate(baseData.getDate() + 1);
+    baseData.setHours(0, 0, 0, 0);
+
+    // Streak: incrementa se teve atividade hoje, zera se não teve
+    const streakAtual = teveAtividade ? streakAnterior + 1 : 0;
+
+    await salvar(CHAVES.streak, {
+      contagem: streakAtual,
+      ultimaData: baseData.toISOString(),
+    });
+
+    // Reseta as atividades do dia
+    await removerObjetivosAtuais();
+
+    return {
+      streakAnterior,
+      streakAtual,
+      atividadesResetadas: objetivosHoje.length,
+      dataSimulada: baseData.toLocaleDateString('pt-BR'),
+    };
+  } catch (error) {
+    console.error('[dev] Erro ao simular virada de dia:', error);
+    throw error;
+  }
+}
+
+export async function adicionarPontosDebug(quantidade) {
+  try {
+    const atual = await carregarPontuacao();
+    await salvarPontuacao(atual + quantidade);
+  } catch (error) {
+    console.error('[dev] Erro ao adicionar pontos:', error);
+    throw error;
+  }
+}
+
+export async function exportarEstadoCompleto() {
+  try {
+    const todasChaves = await AsyncStorage.getAllKeys();
+    const pares = await AsyncStorage.multiGet(todasChaves);
+    const estado = {};
+    for (const [chave, valor] of pares) {
+      try {
+        estado[chave] = JSON.parse(valor);
+      } catch {
+        estado[chave] = valor;
+      }
+    }
+    return estado;
+  } catch (error) {
+    console.error('[dev] Erro ao exportar estado:', error);
+    throw error;
+  }
 }

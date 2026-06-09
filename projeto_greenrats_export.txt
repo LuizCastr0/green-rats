@@ -1,0 +1,2689 @@
+======================================================================
+EXPORT DO PROJETO GREENRATS
+Gerado automaticamente por exportar_projeto.py
+======================================================================
+
+## ESTRUTURA DE PASTAS
+
+.
+├── .gitignore
+├── .vscode
+│   └── .react
+├── App.js
+├── CONTRIBUTING.md
+├── NavigationLayout.js
+├── assets
+│   └── README.md
+├── export_code.py
+├── package-lock.json
+├── package.json
+├── src
+│   ├── components
+│   │   ├── PontosHeader.js
+│   │   └── README.md
+│   ├── context
+│   │   └── UserContext.js
+│   ├── data
+│   │   ├── atividades.js
+│   │   ├── categorias.js
+│   │   ├── conquistas.js
+│   │   ├── loja.js
+│   │   └── missoes.js
+│   ├── navigation
+│   │   ├── README.md
+│   │   └── index.js
+│   ├── screens
+│   │   ├── ConquistasScreen.js
+│   │   ├── DevScreen.js
+│   │   ├── HomeScreen.js
+│   │   ├── Loja_Screen.js
+│   │   ├── PerfilScreen.js
+│   │   ├── README.md
+│   │   ├── SetupScreen.js
+│   │   └── dashboard.js
+│   ├── services
+│   │   ├── Armazenamento.js
+│   │   ├── LogicaApp.js
+│   │   ├── README.md
+│   │   ├── atividades.js
+│   │   ├── estatisticas.js
+│   │   └── missao_service.js
+│   └── styles
+│       └── README.md
+├── test.py
+└── todo.txt
+
+======================================================================
+
+## ARQUIVOS DE CÓDIGO
+
+----------------------------------------------------------------------
+ARQUIVO: App.js
+----------------------------------------------------------------------
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { UserProvider } from './src/context/UserContext';
+import SetupScreen from './src/screens/SetupScreen';
+import AppNavigator from './src/navigation';
+import { carregarProgresso } from './src/services/Armazenamento';
+
+const Stack = createNativeStackNavigator();
+
+function RootNavigator() {
+  const [telaInicial, setTelaInicial] = useState(null);
+
+  useEffect(() => {
+    async function verificarSetup() {
+      const progresso = await carregarProgresso();
+      setTelaInicial(progresso?.nome ? 'Main' : 'Setup');
+    }
+    verificarSetup();
+  }, []);
+
+  if (telaInicial === null) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator size="large" color="#515a47" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator initialRouteName={telaInicial} screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="Setup" component={SetupScreen} />
+      <Stack.Screen name="Main" component={AppNavigator} />
+    </Stack.Navigator>
+  );
+}
+
+export default function App() {
+  return (
+    <UserProvider>
+      <NavigationContainer>
+        <RootNavigator />
+      </NavigationContainer>
+    </UserProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f1f7ed' },
+});
+
+----------------------------------------------------------------------
+ARQUIVO: src/context/UserContext.js
+----------------------------------------------------------------------
+import React, { createContext, useState, useEffect, useContext } from 'react';
+import {
+  carregarPontuacao,
+  carregarStreak,
+  carregarProgresso,
+} from '../services/Armazenamento';
+
+const UserContext = createContext();
+
+export const UserProvider = ({ children }) => {
+  const [pontos, setPontos] = useState(0);
+  const [streak, setStreak] = useState(0);
+  const [nivel, setNivel] = useState(1);
+  const [nome, setNome] = useState('');
+  const [carregando, setCarregando] = useState(true);
+
+  const atualizarDadosGlobais = async () => {
+    const p = await carregarPontuacao();
+    const s = await carregarStreak();
+    const prog = await carregarProgresso();
+
+    setPontos(p);
+    setStreak(s.contagem);
+    setNivel(prog?.nivel || 1);
+    setNome(prog?.nome || '');
+    setCarregando(false);
+  };
+
+  useEffect(() => {
+    atualizarDadosGlobais();
+  }, []);
+
+  return (
+    <UserContext.Provider value={{ pontos, streak, nivel, nome, carregando, atualizarDadosGlobais }}>
+      {children}
+    </UserContext.Provider>
+  );
+};
+
+export const useUser = () => useContext(UserContext);
+
+----------------------------------------------------------------------
+ARQUIVO: src/navigation/index.js
+----------------------------------------------------------------------
+import React from 'react';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { Text } from 'react-native';
+import HomeScreen from '../screens/HomeScreen';
+import ConquistasScreen from '../screens/ConquistasScreen';
+import PontosHeader from '../components/PontosHeader';
+import DevScreen from '../screens/DevScreen';
+
+const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+
+function TabIcon({ emoji, focused }) {
+  return <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{emoji}</Text>;
+}
+
+function MainTabs() {
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        header: () => <PontosHeader />,
+        headerShown: true,
+        tabBarActiveTintColor: '#515a47',
+        tabBarInactiveTintColor: '#999',
+      }}
+    >
+      <Tab.Screen
+        name="Hoje"
+        component={HomeScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🌿" focused={focused} /> }}
+      />
+      <Tab.Screen
+        name="Conquistas"
+        component={ConquistasScreen}
+        options={{ tabBarIcon: ({ focused }) => <TabIcon emoji="🏆" focused={focused} /> }}
+      />
+    </Tab.Navigator>
+  );
+}
+
+export default function AppNavigator() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="MainTabs" component={MainTabs} />
+      <Stack.Screen name="Dev" component={DevScreen} />
+    </Stack.Navigator>
+  );
+}
+
+----------------------------------------------------------------------
+ARQUIVO: src/data/atividades.js
+----------------------------------------------------------------------
+// src/data/atividades.js
+
+export const atividades = [
+
+  // ── ALIMENTAÇÃO ───────────────────────────────────────────────
+  {
+    id: "consumir_carne_vermelha",
+    categoria: "alimentacao",
+    titulo: "Comi carne vermelha",
+    pontos: -5,
+    carbonoKg: -9.9,
+    impacto: "negativo",
+    descricao: "Você machucou um animal e emitiu 9,9 kgCO2e nessa refeição.",
+    detalhes: "O consumo de carne vermelha é uma das piores opções ecológicas relacionadas à alimentação, sendo responsável por grande parte das emissões de gases do efeito estufa ligadas à comida.",
+    icone: "🥩",
+  },
+  {
+    id: "refeicao_vegetariana",
+    categoria: "alimentacao",
+    titulo: "Refeição vegetariana",
+    pontos: 20,
+    carbonoKg: 0.9,
+    impacto: "muito_alto",
+    descricao: "Você deixou um animalzinho feliz e deixou de emitir 0,9 kgCO2e.",
+    detalhes: "Ao optar por uma refeição vegetariana você deixa de emitir um tantão de carbono e salva um animalzinho da morte.",
+    icone: "🥗",
+  },
+  {
+    id: "refeicao_vegana",
+    categoria: "alimentacao",
+    titulo: "Refeição vegana",
+    pontos: 20,
+    carbonoKg: 2.74,
+    impacto: "muito_alto",
+    descricao: "Você foi um herói para os animais e para o planeta, economizando 2,74 kgCO2e nesta refeição!",
+    detalhes: "Uou! Você tirou todos os itens de origem animal da sua refeição e contribuiu para a diminuição da exploração animal.",
+    icone: "🌱",
+  },
+  {
+    id: "jogar_comida_fora",
+    categoria: "alimentacao",
+    titulo: "Joguei comida fora",
+    pontos: -5,
+    carbonoKg: -0.21,
+    impacto: "negativo",
+    descricao: "Você gerou lixo e emitiu 0,21 kgCO2e (prejuízo para o planeta)!",
+    detalhes: "Quando você joga comida fora, todo o carbono gasto para produzir, transportar e preparar aquele alimento foi desperdiçado à toa.",
+    icone: "🗑️",
+  },
+  {
+    id: "leite_de_soja",
+    categoria: "alimentacao",
+    titulo: "Troquei leite comum por leite de soja",
+    pontos: 10,
+    carbonoKg: 1.94,
+    impacto: "medio",
+    descricao: "Você aprimorou o seu paladar e deixou de emitir 2,22 kgCO2e.",
+    detalhes: "Uma pessoa com uma dieta variada pode optar por leite vegetal a fim de diminuir as emissões de gases do efeito estufa, além de ser bem gostoso.",
+    icone: "🥛",
+  },
+
+  // ── CASA ──────────────────────────────────────────────────────
+  {
+    id: "desligar_standby",
+    categoria: "energia",
+    titulo: "Desliguei aparelhos em standby",
+    pontos: 5,
+    carbonoKg: 0.48,
+    impacto: "baixo",
+    descricao: "Você desligou da tomada e deixou de emitir 0,48 kgCO2e por dia!",
+    detalhes: "Aparelhos em modo standby continuam consumindo energia, às vezes sem você nem perceber.",
+    icone: "🔌",
+  },
+  {
+    id: "sem_ar_condicionado",
+    categoria: "energia",
+    titulo: "Dormi sem ar-condicionado",
+    pontos: 10,
+    carbonoKg: 0.43,
+    impacto: "medio",
+    descricao: "Obrigada pelo sacrifício dessa noite. Você deixou de emitir 0,43 kgCO2e.",
+    detalhes: "Sabemos que as noites no Brasil são bem quentes, mas uma noite inteira de ar-condicionado ligado emite quase 10% do seu limite diário ideal.",
+    icone: "❄️",
+  },
+  {
+    id: "agua_reutilizada",
+    categoria: "agua",
+    titulo: "Lavei o quintal com água reutilizada",
+    pontos: 5,
+    carbonoKg: 0.001,
+    impacto: "baixo",
+    descricao: "Você economizou 30l de água e 0,033 kgCO2e/m³.",
+    detalhes: "Quando você usa água reutilizada para lavar o quintal, você não só economiza água (mais dinheiro no fim do mês), mas também economiza no processo que leva água limpa até você.",
+    icone: "💧",
+  },
+
+  // ── CONSUMO ───────────────────────────────────────────────────
+  {
+    id: "ecobag",
+    categoria: "consumo",
+    titulo: "Usei ecobag nas compras",
+    pontos: 5,
+    carbonoKg: 0.3,
+    impacto: "baixo",
+    descricao: "Você foi estiloso e deixou de emitir 0,3 kgCO2e.",
+    detalhes: "Ecobags são uma ótima opção para substituir o uso de sacolas plásticas de uso único, além de serem bonitas.",
+    icone: "👜",
+  },
+  {
+    id: "produtor_local",
+    categoria: "consumo",
+    titulo: "Comprei de produtores locais",
+    pontos: 5,
+    carbonoKg: 0.3,
+    impacto: "baixo",
+    descricao: "Você fortaleceu a sua comunidade e deixou de emitir 0,3 kgCO2e por kg de alimento!",
+    detalhes: "Além de fortalecer a comunidade local, diminui as emissões referentes ao transporte de carga e pode ser uma opção mais saudável e barata.",
+    icone: "🧑‍🌾",
+  },
+  {
+    id: "brechó",
+    categoria: "consumo",
+    titulo: "Comprei roupa em brechó",
+    pontos: 5,
+    carbonoKg: 2.3,
+    impacto: "baixo",
+    descricao: "Você lutou contra a fast fashion!",
+    detalhes: "Comprar roupas de segunda mão aumenta a vida útil de uma peça e diminui a poluição causada pelo descarte de tecidos.",
+    icone: "👕",
+  },
+  {
+    id: "compra_a_granel",
+    categoria: "consumo",
+    titulo: "Comprei itens a granel",
+    pontos: 5,
+    carbonoKg: 0.07,
+    impacto: "baixo",
+    descricao: "Você evitou embalagens desnecessárias! Mas por favor não vá de carro para essas lojas.",
+    detalhes: "Encontrar lugares em que você pode utilizar suas próprias embalagens pode ser difícil, mas a recompensa não é — além de evitar resíduos plásticos você também deixa de emitir carbono.",
+    icone: "⚖️",
+  },
+  {
+    id: "sacola_reutilizavel",
+    categoria: "consumo",
+    titulo: "Usei sacola plástica reutilizável",
+    pontos: 10,
+    carbonoKg: 0.03,
+    impacto: "medio",
+    descricao: "Ao utilizar uma sacola reutilizável você deixa de emitir carbono e lixo para o planeta.",
+    detalhes: "O Brasil consome cerca de 13 bilhões de sacolas plásticas descartáveis por ano, uma média de 65 sacolas por pessoa.",
+    icone: "🛍️",
+  },
+  {
+    id: "jeans_usado",
+    categoria: "consumo",
+    titulo: "Doei ou comprei um jeans usado",
+    pontos: 15,
+    carbonoKg: null,
+    impacto: "alto",
+    descricao: "Você aumentou o ciclo de uso da peça, diminuindo os impactos ambientais.",
+    detalhes: "O tecido jeans é um dos tecidos com maior taxa de emissão de gases do efeito estufa. Por ser resistente, permite utilização por muitos anos e por muitos donos.",
+    icone: "👖",
+  },
+
+  // ── HÁBITOS ───────────────────────────────────────────────────
+  {
+    id: "reciclar_lixo",
+    categoria: "residuos",
+    titulo: "Reciclei o lixo",
+    pontos: 10,
+    carbonoKg: 0.1218,
+    impacto: "medio",
+    descricao: "Você fez sua parte e deixou de emitir 0,248 kgCO2e por kg de material reciclado!",
+    detalhes: "Reciclar transforma resíduos em novos produtos, evitando a extração de matérias-primas e reduzindo o consumo de energia.",
+    icone: "♻️",
+  },
+  {
+    id: "copinho_plastico_ru",
+    categoria: "residuos",
+    titulo: "Usei copinho plástico no RU",
+    pontos: -5,
+    carbonoKg: -0.072,
+    impacto: "negativo",
+    descricao: "Além de gerar lixo desnecessário, você emitiu 0,072 kgCO2e por copinho.",
+    detalhes: "No começo da graduação todos receberam uma canequinha ecológica. É tão difícil assim deixá-la na mochila? Estamos decepcionados com você.",
+    icone: "🥤",
+  },
+  {
+    id: "banho_curto",
+    categoria: "agua",
+    titulo: "Reduzi o banho quente em 5 minutos",
+    pontos: 5,
+    carbonoKg: 0.043,
+    impacto: "baixo",
+    descricao: "Você tomou um banho mais rápido e deixou de emitir 0,043 kgCO2e, além de economizar 22 litros de água.",
+    detalhes: "Não se preocupe, você continua cheirosinhx (mas passa um desodorante, tá).",
+    icone: "🚿",
+  },
+  {
+    id: "doe_roupas",
+    categoria: "residuos",
+    titulo: "Doei roupas",
+    pontos: 10,
+    carbonoKg: null,
+    impacto: "medio",
+    descricao: "Você deu uma nova vida para suas roupas!",
+    detalhes: "Doar roupas aumenta o ciclo de vida das peças e reduz o descarte têxtil.",
+    icone: "🎁",
+  },
+  {
+    id: "canudo_reutilizavel",
+    categoria: "residuos",
+    titulo: "Usei canudo reutilizável",
+    pontos: 10,
+    carbonoKg: 0.0015,
+    impacto: "medio",
+    descricao: "A melhor opção é ter o seu próprio canudo!",
+    detalhes: "Embora canudos de papel sejam biodegradáveis, as emissões de carbono para ambos são semelhantes. Ter o seu próprio canudo é a melhor opção.",
+    icone: "🧉",
+  },
+
+  // ── NATUREZA ──────────────────────────────────────────────────
+  {
+    id: "compostagem",
+    categoria: "natureza",
+    titulo: "Fiz compostagem",
+    pontos: 5,
+    carbonoKg: null,
+    impacto: "baixo",
+    descricao: "Você transformou resíduos orgânicos em adubo para o planeta!",
+    detalhes: "A compostagem reduz o lixo orgânico que vai para aterros e produz um adubo natural valioso.",
+    icone: "🌿",
+  },
+  {
+    id: "plantar_arvore",
+    categoria: "natureza",
+    titulo: "Plantei uma árvore",
+    pontos: 20,
+    carbonoKg: 22,
+    impacto: "muito_alto",
+    descricao: "Você deixou nossa casa mais verde.",
+    detalhes: "Plantar uma árvore significa carbono sequestrado da atmosfera, sombra, abrigo para os animais e umidade para o ar!",
+    icone: "🌳",
+  },
+
+  // ── TRANSPORTE ────────────────────────────────────────────────
+  {
+    id: "onibus_10km",
+    categoria: "transporte",
+    titulo: "Fui de ônibus (~10 km)",
+    pontos: 15,
+    carbonoKg: 1.1,
+    impacto: "alto",
+    descricao: "Você melhorou a mobilidade urbana e contribuiu com a qualidade do ar!",
+    detalhes: "Andar de ônibus melhora a mobilidade urbana, contribui com a qualidade do ar e é uma opção barata de locomoção.",
+    icone: "🚌",
+  },
+  {
+    id: "carona_solidaria",
+    categoria: "transporte",
+    titulo: "Dei carona solidária (~10 km)",
+    pontos: 5,
+    carbonoKg: 0.038,
+    impacto: "baixo",
+    descricao: "Você foi um bom amigo e ajudou o planeta!",
+    detalhes: "Dividir um percurso de carro economiza 50% das emissões individuais por trajeto.",
+    icone: "🚗",
+  },
+  {
+    id: "metro_trem",
+    categoria: "transporte",
+    titulo: "Fui de metrô ou trem (~10 km)",
+    pontos: 20,
+    carbonoKg: 1.77,
+    impacto: "muito_alto",
+    descricao: "Uma das opções mais sustentáveis de locomoção atualmente.",
+    detalhes: "Além de ser um dos melhores sistemas de metrô/trem do mundo, esse transporte é uma das opções mais sustentáveis de locomoção. Algumas linhas do metrô de SP têm cálculo exclusivo de pegada de carbono positiva!",
+    icone: "🚇",
+  },
+  {
+    id: "bike_5km",
+    categoria: "transporte",
+    titulo: "Fui de bike (até 5 km)",
+    pontos: 10,
+    carbonoKg: 0.95,
+    impacto: "medio",
+    descricao: "Você economizou dinheiro e deixou de emitir 0,19 kgCO2e/km.",
+    detalhes: "Andar de bicicleta é bom para a saúde, para conhecer melhor a cidade e para economizar no fim do mês.",
+    icone: "🚲",
+  },
+  {
+    id: "bike_10km",
+    categoria: "transporte",
+    titulo: "Fui de bike (até 10 km)",
+    pontos: 15,
+    carbonoKg: 1.9,
+    impacto: "alto",
+    descricao: "Você economizou muito e deixou de emitir 0,19 kgCO2e/km.",
+    detalhes: "Andar de bicicleta é bom para a saúde, para conhecer melhor a cidade e para economizar no fim do mês.",
+    icone: "🚴",
+  },
+  {
+    id: "bike_mais_10km",
+    categoria: "transporte",
+    titulo: "Fui de bike (mais de 10 km)",
+    pontos: 20,
+    carbonoKg: 2.85,
+    impacto: "muito_alto",
+    descricao: "Você deixou de emitir 2,85 kgCO2e. Não esqueça de beber água e passar protetor solar.",
+    detalhes: "Cada pedalada sua economiza carbono e torna o mundo um lugar muito mais limpo.",
+    icone: "🏅",
+  },
+  {
+    id: "etanol",
+    categoria: "transporte",
+    titulo: "Abasteci com etanol",
+    pontos: 10,
+    carbonoKg: 0.86,
+    impacto: "medio",
+    descricao: "Você escolheu o combustível verde e deixou de emitir 0,43 kgCO2e/l neste abastecimento!",
+    detalhes: "O etanol queima de forma mais limpa que a gasolina, e a cana-de-açúcar absorve CO2 durante o cultivo. (Para um abastecimento de 20l)",
+    icone: "⛽",
+  },
+  {
+    id: "aviao",
+    categoria: "transporte",
+    titulo: "Viajei de avião",
+    pontos: -5,
+    carbonoKg: -99,
+    impacto: "negativo",
+    descricao: "SEM PALAVRAS. Aproveite a sua viagem.",
+    detalhes: "A aviação é uma das atividades humanas com maior impacto climático por passageiro.",
+    icone: "✈️",
+  },
+  {
+    id: "caminhada_1_5km",
+    categoria: "transporte",
+    titulo: "Fui a pé (até 1,5 km)",
+    pontos: 5,
+    carbonoKg: 0.18,
+    impacto: "baixo",
+    descricao: "Cada vez que você deixa o carro para lugares próximos, a soma faz uma grande diferença!",
+    detalhes: "Cada vez que você deixa de ir de carro para um lugar muito próximo da sua casa, você deixa de emitir uma pequena quantidade de carbono. Mas a soma dessas quantidades em uma semana faz uma grandíssima diferença.",
+    icone: "🚶",
+  },
+  {
+    id: "caminhada_2_5km",
+    categoria: "transporte",
+    titulo: "Fui a pé (até 2,5 km)",
+    pontos: 10,
+    carbonoKg: 0.3,
+    impacto: "medio",
+    descricao: "Há algo mais legal do que uma boa caminhada?",
+    detalhes: "Além dos benefícios ambientais, caminhar é excelente para a saúde e para conhecer melhor o bairro.",
+    icone: "🚶‍♂️",
+  },
+  {
+    id: "caminhada_5km",
+    categoria: "transporte",
+    titulo: "Fui a pé (mais de 5 km)",
+    pontos: 15,
+    carbonoKg: 1.425,
+    impacto: "alto",
+    descricao: "Você deixou de emitir 1,2 kgCO2e. Estamos muito orgulhosos de você!",
+    detalhes: "1 hora de caminhada não é para todos. Não esqueça de marcar seu caminho e postar no Instagram para impressionar os coleguinhas.",
+    icone: "🥾",
+  },
+];
+
+----------------------------------------------------------------------
+ARQUIVO: src/data/categorias.js
+----------------------------------------------------------------------
+// src/data/categorias.js
+// Categorias fixas
+
+// src/data/categorias.js
+
+export const categorias = [
+  { id: "alimentacao", titulo: "Alimentação", icone: "🍽️" },
+  { id: "transporte",  titulo: "Transporte",  icone: "🚌" },
+  { id: "energia",     titulo: "Energia",     icone: "⚡" },
+  { id: "agua",        titulo: "Água",        icone: "💧" },
+  { id: "residuos",    titulo: "Resíduos",    icone: "♻️" },
+  { id: "consumo",     titulo: "Consumo",     icone: "🛍️" },
+  { id: "natureza",    titulo: "Natureza",    icone: "🌿" },
+];
+
+----------------------------------------------------------------------
+ARQUIVO: src/data/conquistas.js
+----------------------------------------------------------------------
+// src/data/conquistas.js
+
+export const conquistas = [
+  {
+    id: "eco_iniciante",
+    titulo: "Eco Iniciante",
+    descricao: "Registrou sua primeira ação pelo planeta.",
+    objetivo: 1,
+    tipo: "total_acoes",
+    icone: "🍃",
+    dificuldade: "grama",
+  },
+  {
+    id: "rei_das_pedaladas",
+    titulo: "Rei das Pedaladas",
+    descricao: "Você usou toda a sua força interior.",
+    objetivo: 3,
+    tipo: "acoes_ids",
+    idsNecessarios: ["bike_5km", "bike_10km", "bike_mais_10km"],
+    icone: "🚴",
+    dificuldade: "floresta",
+  },
+  {
+    id: "contra_fast_fashion",
+    titulo: "Todos contra fast fashion",
+    descricao: "Você aumentou o ciclo de vida das suas roupas.",
+    objetivo: 2,
+    tipo: "acoes_ids",
+    idsNecessarios: ["brechó", "jeans_usado"],
+    icone: "👕",
+    dificuldade: "arvore",
+  },
+  {
+    id: "gasolina_e_alcool",
+    titulo: "A gasolina é álcool",
+    descricao: "Abasteceu com etanol 10 vezes.",
+    objetivo: 10,
+    tipo: "contagem_acao",
+    idAlvo: "etanol",
+    icone: "⛽",
+    dificuldade: "arbusto",
+  },
+  {
+    id: "rei_das_caminhadas",
+    titulo: "Rei das Caminhadas",
+    descricao: "Um passo a mais para um mundo melhor.",
+    objetivo: 3,
+    tipo: "acoes_ids",
+    idsNecessarios: ["caminhada_1_5km", "caminhada_2_5km", "caminhada_5km"],
+    icone: "🥾",
+    dificuldade: "floresta",
+  },
+  {
+    id: "salve_as_tartarugas",
+    titulo: "Salve as tartarugas",
+    descricao: "O maior apoiador do projeto tamar está entre nós.",
+    objetivo: 3,
+    tipo: "acoes_ids",
+    idsNecessarios: ["canudo_reutilizavel", "copinho_plastico_ru", "sacola_reutilizavel"],
+    icone: "🐢",
+    dificuldade: "grama",
+  },
+  {
+    id: "paladar_selvagem",
+    titulo: "Paladar selvagem",
+    descricao: "Retire toda comida de origem animal do seu prato.",
+    objetivo: 3,
+    tipo: "acoes_ids",
+    idsNecessarios: ["refeicao_vegana", "refeicao_vegetariana", "leite_de_soja"],
+    icone: "🥗",
+    dificuldade: "arbusto",
+  },
+  {
+    id: "anjo_do_volante",
+    titulo: "Anjo do volante",
+    descricao: "Dê carona todos os dias da semana.",
+    objetivo: 7,
+    tipo: "contagem_acao",
+    idAlvo: "carona_solidaria",
+    icone: "😇",
+    dificuldade: "arbusto",
+  },
+  {
+    id: "fogo_eterno",
+    titulo: "Fogo Eterno",
+    descricao: "Manteve um streak de 7 dias.",
+    objetivo: 7,
+    tipo: "max_streak",
+    icone: "🔥",
+    dificuldade: "arvore",
+  },
+  // Conquistas negativas — desbloqueiam quando o usuário faz atividades ruins
+  {
+    id: "turne_da_ts",
+    titulo: "Turnê da TS",
+    descricao: "Que decepção.",
+    objetivo: 1,
+    tipo: "contagem_acao",
+    idAlvo: "aviao",
+    icone: "✈️",
+    dificuldade: "poluicao",
+    negativa: true,
+  },
+  {
+    id: "mentirosos",
+    titulo: "Mentirosos?",
+    descricao: "Alguém está tentando nos enganar.",
+    objetivo: 1,
+    tipo: "contagem_acao",
+    idAlvo: "copinho_plastico_ru",
+    icone: "🤥",
+    dificuldade: "poluicao",
+    negativa: true,
+  },
+];
+
+----------------------------------------------------------------------
+ARQUIVO: src/data/missoes.js
+----------------------------------------------------------------------
+// src/data/missoes.js
+
+// missoẽs para senso de progrssão e comunidade
+
+// criando missão global: todos os usuários recebem juntos,
+// usando data local para contorinar o fato de nao termos servidor
+
+export const missoesGlobais = [
+  {
+    id: "missao_sem_plastico",
+    titulo: "Dia sem Plástico",
+    descricao: "Não use sacolas ou garrafas plásticas hoje.",
+    pontos: 100,
+    icone: "🥤",
+  },
+  {
+    id: "missao_banho_curto",
+    titulo: "Banho de 5 Minutos",
+    descricao: "Reduza seu tempo no banho para economizar água.",
+    pontos: 80,
+    icone: "🚿",
+  },
+  {
+    id: "missao_apague_luzes",
+    titulo: "Apague as Luzes",
+    descricao: "Deixe luzes apagadas em cômodos vazios o dia todo.",
+    pontos: 50,
+    icone: "💡",
+  },
+  {
+    id: "missao_sem_carne",
+    titulo: "Segunda sem Carne",
+    descricao: "Tente não consumir carne hoje.",
+    pontos: 120,
+    icone: "🌱",
+  },
+  {
+    id: "missao_caminhada",
+    titulo: "Caminhada Ecológica",
+    descricao: "Troque um trajeto curto de carro por caminhada.",
+    pontos: 90,
+    icone: "🚶",
+  },
+  // adicionar mais missoes globais (nao sabemos sobre atualizações então quanto mais, melhor)
+];
+
+
+----------------------------------------------------------------------
+ARQUIVO: src/data/loja.js
+----------------------------------------------------------------------
+// src/data/loja.js
+// cria e seta os itens compraveis da loja, o front vai completar isso
+
+export const items = [
+  {
+    id: "item_oculos",
+    titulo: "Óculos Escuros",
+    preco: 200,
+    categoria: "acessorio",
+    icone: "🕶️",
+  },
+  {
+    id: "item_bone",
+    titulo: "Boné Ecológico",
+    preco: 150,
+    categoria: "acessorio",
+    icone: "🧢",
+  },
+  {
+    id: "item_planta",
+    titulo: "Vaso de Flor",
+    preco: 500,
+    categoria: "decoracao",
+    icone: "🌻",
+  },
+  {
+    id: "fundo_floresta",
+    titulo: "Cenário Floresta",
+    preco: 1000,
+    categoria: "cenario",
+    icone: "🌲",
+  },
+];
+
+
+----------------------------------------------------------------------
+ARQUIVO: src/services/Armazenamento.js
+----------------------------------------------------------------------
+// src/services/Armazenamento.js
+
+// arquivo responsável por toda a lógica de armazenamento local do app, usando AsyncStorage para guardar os dados no celular do usuário
+// vai ficar desorganizado no começo, mas a ideia é ir melhorando e organizando conforme o desenvolvimento do app avança
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+
+// chaves de armazenamento para organizar os dados salvos no celular
+const CHAVES = {
+  progresso: "rat:progresso",
+  objetivos: "rat:objetivos",
+  historico: "rat:historico",
+  pontuacao: "rat:pontuacao",
+  streak: "rat:streak",
+  inventario: "rat:inventario", // itens já comprados
+  conquistas: "rat:conquistas",
+};
+
+//funções externas────────────────────────────────────────────────────────────────────────
+
+// Converte qualquer valor em texto e salva no armazenamento local.
+async function salvar(chave, valor) {
+  try {
+    await AsyncStorage.setItem(chave, JSON.stringify(valor));
+  } catch (error) {
+    console.error(`[storageService] Erro ao salvar "${chave}":`, error);
+    throw error;
+  }
+}
+
+// Lê o valor salvo e converte de volta para o tipo original.
+// Se não existir nada, retorna o "valorPadrao" informado.
+async function carregar(chave, valorPadrao = null) {
+  try {
+    const texto = await AsyncStorage.getItem(chave);
+    if (texto != null) {
+      return JSON.parse(texto);
+    }
+    return valorPadrao;
+  } catch (error) {
+    console.error(`[storageService] Erro ao carregar "${chave}":`, error);
+    throw error;
+  }
+}
+
+// Apaga o valor de uma chave específica do armazenamento local.
+async function apagar(chave) {
+  try {
+    await AsyncStorage.removeItem(chave);
+  } catch (error) {
+    console.error(`[storageService] Erro ao remover "${chave}":`, error);
+    throw error;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progresso geral do usuário
+// Guarda informações como nível atual, pontos acumulados, etc.
+// Exemplo de objeto esperado: { nivel: 2, pontos: 150 }
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Recebe um objeto com o progresso atual e salva.
+export async function salvarNovoProgresso(progresso) {
+  await salvar(CHAVES.progresso, progresso);
+}
+
+// Retorna o objeto de progresso salvo.
+// Se ainda não foi salvo nada, retorna null.
+export async function carregarProgresso() {
+  return carregar(CHAVES.progresso, null);
+}
+
+// Apaga o progresso salvo.
+export async function apagarProgresso() {
+  await apagar(CHAVES.progresso);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Objetivos concluídos hoje
+// Guarda a lista de objetivos que o usuário marcou como feitos no dia.
+// Exemplo de array esperado: ["andar", "nao usar ar-condicionado", "sei la"]
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function substituirObjetivos(objetivos) {
+  await salvar(CHAVES.objetivos, objetivos);
+}
+
+// Retorna o array de objetivos salvos.
+// Se não houver nenhum salvo ainda, retorna uma lista vazia [].
+export async function carregarObjetivosAtuais() {
+  return carregar(CHAVES.objetivos, []);
+}
+
+// Apaga os objetivos do dia salvos.
+export async function removerObjetivosAtuais() {
+  await apagar(CHAVES.objetivos);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Histórico do usuário
+// Guarda um registro de atividades passadas para exibir no app.
+// Exemplo de array esperado: [{ data: "2025-06-01", pontos: 80 }, ...]
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Recebe um array com todo o histórico e salva no celular.
+export async function salvarHistorico(historico) {
+  await salvar(CHAVES.historico, historico);
+}
+
+// Retorna o array com o histórico completo.
+// Se não houver nada salvo ainda, retorna uma lista vazia [].
+export async function carregarHistorico() {
+  return carregar(CHAVES.historico, []);
+}
+
+// Apaga o histórico salvo.
+export async function removerHistorico() {
+  await apagar(CHAVES.historico);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pontuação total
+// Guarda um número simples (int) representando a pontuação acumulada do usuário.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Recebe um número e salva como pontuação total.
+export async function salvarPontuacao(pontuacao) {
+  await salvar(CHAVES.pontuacao, pontuacao);
+}
+
+// Retorna a pontuação total salva.
+// Se ainda não existir nenhuma, retorna 0.
+export async function carregarPontuacao() {
+  return carregar(CHAVES.pontuacao, 0);
+}
+
+// Apaga a pontuação salva.
+export async function removerPontuacao() {
+  await apagar(CHAVES.pontuacao);
+}
+
+// reset completo (nao pode ser desfeito, cuidado ao usar)
+export async function limparDadosDoUsuario() {
+  try {
+    await AsyncStorage.multiRemove(Object.values(CHAVES));
+  } catch (error) {
+    console.error("[storageService] Erro ao limpar dados do usuário:", error);
+    throw error;
+  }
+}
+
+// lógica de Histórico e Impacto
+
+export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtividade = null) {
+  try {
+    const historicoAtual = await carregar(CHAVES.historico, []);
+
+    const novoRegistro = {
+      id: Date.now().toString(),
+      idAtividade,           // ← campo novo, necessário para conquistas por id
+      acao: acaoNome,
+      pontos: pontosGanhos,
+      data: new Date().toISOString(),
+    };
+
+    const novoHistorico = [novoRegistro, ...historicoAtual];
+    await salvar(CHAVES.historico, novoHistorico);
+
+    const pontuacaoAntiga = await carregarPontuacao();
+    await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
+
+    await atualizarStreak();
+
+    return true;
+  } catch (error) {
+    console.error("Erro ao registrar ação:", error);
+    return false;
+  }
+}
+
+// lógica do streak
+export async function atualizarStreak() {
+  try {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0); // compara apenas datas, verificar com o grupo se é melhor considerar o horário
+
+    const dadosStreak = await carregar(CHAVES.streak, {
+      contagem: 0,
+      ultimaData: null,
+    });
+
+    if (!dadosStreak.ultimaData) {
+      // primeira vez
+      const novoStreak = { contagem: 1, ultimaData: hoje.toISOString() };
+      await salvar(CHAVES.streak, novoStreak);
+      return novoStreak;
+    }
+
+    const ultimaData = new Date(dadosStreak.ultimaData);
+    ultimaData.setHours(0, 0, 0, 0);
+
+    const diferencaDias = (hoje - ultimaData) / (1000 * 60 * 60 * 24);
+
+    let novaContagem = dadosStreak.contagem;
+
+    if (diferencaDias === 1) {
+      novaContagem += 1;
+    } else if (diferencaDias > 1) {
+      novaContagem = 1;
+    }
+
+    const novoStreak = {
+      contagem: novaContagem,
+      ultimaData: hoje.toISOString(),
+    };
+    await salvar(CHAVES.streak, novoStreak);
+    return novoStreak;
+  } catch (error) {
+    console.error("Erro ao atualizar streak:", error);
+    return { contagem: 0, ultimaData: null };
+  }
+}
+
+export async function carregarStreak() {
+  return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+}
+
+// sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
+import { conquistas } from "../data/conquistas";
+
+export async function carregarConquistasGanhas() {
+  return carregar(CHAVES.conquistas, { ganhas: [] });
+}
+
+export async function checarNovasConquistas() {
+  const historico = await carregarHistorico();
+  const streak = await carregarStreak();
+  const conquistasJaGanhas = await carregarConquistasGanhas();
+
+  let novasConquistasNestaSessao = [];
+
+  // monta um Set com todos os ids de atividades já feitas (para lookup rápido)
+  const idsFeitos = new Set(historico.map(item => item.idAtividade).filter(Boolean));
+
+  // monta um contador de quantas vezes cada atividade foi feita
+  const contagemPorId = {};
+  historico.forEach(item => {
+    if (item.idAtividade) {
+      contagemPorId[item.idAtividade] = (contagemPorId[item.idAtividade] || 0) + 1;
+    }
+  });
+
+  conquistas.forEach((c) => {
+    if (conquistasJaGanhas.ganhas.includes(c.id)) return;
+
+    let alcancou = false;
+
+    if (c.tipo === "total_acoes") {
+      alcancou = historico.length >= c.objetivo;
+
+    } else if (c.tipo === "max_streak") {
+      alcancou = streak.contagem >= c.objetivo;
+
+    } else if (c.tipo === "acoes_ids") {
+      // verifica se todos os ids necessários já foram feitos pelo menos uma vez
+      alcancou = c.idsNecessarios.every(id => idsFeitos.has(id));
+
+    } else if (c.tipo === "contagem_acao") {
+      // verifica se uma atividade específica foi feita X vezes
+      alcancou = (contagemPorId[c.idAlvo] || 0) >= c.objetivo;
+    }
+
+    if (alcancou) {
+      conquistasJaGanhas.ganhas.push(c.id);
+      novasConquistasNestaSessao.push(c);
+    }
+  });
+
+  if (novasConquistasNestaSessao.length > 0) {
+    await salvar(CHAVES.conquistas, conquistasJaGanhas);
+  }
+
+  return novasConquistasNestaSessao;
+}
+
+export async function carregarInventario() {
+  return carregar(CHAVES.inventario, []);
+}
+
+export async function checarItemNoInventario(item) {
+  const inventarioAtual = await carregarInventario();
+  const itemParaEncontrar = inventarioAtual.find((i) => i.id === item.id);
+
+  if (itemParaEncontrar) {
+    return true;
+  }
+  return false;
+}
+
+// logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
+export async function comprarItem(item) {
+  try {
+    const pontosAtuais = await carregarPontuacao();
+
+    // verifica se tem dinheiro
+    if (pontosAtuais < item.preco) {
+      return { sucesso: false, erro: "Pontos insuficientes!" };
+    }
+
+    // verifica se o item ja foi comprado
+    const itemJaExiste = await checarItemNoInventario(item);
+    if (itemJaExiste) {
+      return { sucesso: false, erro: "Você já possui este item!" };
+    }
+
+    // carrega o inventário
+    const inventarioAtual = await carregarInventario();
+
+    //adiciona o item
+    const novoInventario = [...inventarioAtual, item];
+
+    await salvarPontuacao(pontosAtuais - item.preco);
+    await salvar(CHAVES.inventario, novoInventario);
+
+    return { sucesso: true, novoSaldo: pontosAtuais - item.preco };
+  } catch (error) {
+    console.error("Erro ao processar compra:", error);
+    return { sucesso: false, erro: "Erro ao processar compra." };
+  }
+}
+
+export async function salvarItemNoInventario(item) {
+  const inventarioAtual = await carregarInventario();
+  const inventarioNovo = [...inventarioAtual, item];
+  await salvar(CHAVES.inventario, inventarioNovo);
+}
+
+export async function removerItemDoInventario(item) {
+  // checagem para ver se o item sequer está no inventário
+  const itemNoInventario = await checarItemNoInventario(item);
+  // se estiver continua, se não estiver para a função
+  if (!itemNoInventario) {
+    return { sucesso: false, erro: "Item não encontrado no inventário." };
+  }
+
+  const inventarioAtual = await carregarInventario();
+  //cria um novo inventario
+  const inventarioNovo = [];
+
+  // para todo item dentro do inventario se for diferente do item a ser removido é adicionado no novo inventario
+  for (let i = 0; i < inventarioAtual.length; i++) {
+    if (inventarioAtual[i].id !== item.id) {
+      inventarioNovo.push(inventarioAtual[i]);
+    }
+  }
+  // substitui inventario antigo pelo novo
+  await salvar(CHAVES.inventario, inventarioNovo);
+
+  return { sucesso: true, erro: false };
+}
+
+export async function buscarItemPorId(idDoItem) {
+  const inventarioAtual = await carregarInventario();
+  const itemExiste = inventarioAtual.find((i) => i.id === idDoItem);
+  if (itemExiste) {
+    return itemExiste;
+  }
+  return null;
+}
+
+export async function limparInventario() {
+  await salvar(CHAVES.inventario, []);
+}
+
+export async function tamanhoDoInventario() {
+  const inventarioAtual = await carregarInventario();
+  return inventarioAtual.length;
+}
+
+export async function checarConquista(conquista) {
+  const conquistasAtuais = await carregarConquistasGanhas();
+
+  if (conquistasAtuais.ganhas.includes(conquista.id)) {
+    return true;
+  }
+
+  return false;
+}
+
+export async function limparConquistas() {
+  await apagar(CHAVES.conquistas);
+}
+
+// ─── DEV TOOLS (não usar em produção) ────────────────────────────────────────
+
+export async function resetarTudo() {
+  try {
+    await AsyncStorage.clear();
+  } catch (error) {
+    console.error('[dev] Erro ao resetar tudo:', error);
+    throw error;
+  }
+}
+
+export async function simularViradaDia() {
+  try {
+    const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+    const objetivosHoje = await carregarObjetivosAtuais();
+
+    const streakAnterior = dadosStreak.contagem;
+    const teveAtividade = objetivosHoje.length > 0;
+
+    // Calcula nova data (ontem + 1 dia a partir da ultimaData, ou amanhã a partir de hoje)
+    const baseData = dadosStreak.ultimaData
+      ? new Date(dadosStreak.ultimaData)
+      : new Date();
+    baseData.setDate(baseData.getDate() + 1);
+    baseData.setHours(0, 0, 0, 0);
+
+    // Streak: incrementa se teve atividade hoje, zera se não teve
+    const streakAtual = teveAtividade ? streakAnterior + 1 : 0;
+
+    await salvar(CHAVES.streak, {
+      contagem: streakAtual,
+      ultimaData: baseData.toISOString(),
+    });
+
+    // Reseta as atividades do dia
+    await removerObjetivosAtuais();
+
+    return {
+      streakAnterior,
+      streakAtual,
+      atividadesResetadas: objetivosHoje.length,
+      dataSimulada: baseData.toLocaleDateString('pt-BR'),
+    };
+  } catch (error) {
+    console.error('[dev] Erro ao simular virada de dia:', error);
+    throw error;
+  }
+}
+
+export async function adicionarPontosDebug(quantidade) {
+  try {
+    const atual = await carregarPontuacao();
+    await salvarPontuacao(atual + quantidade);
+  } catch (error) {
+    console.error('[dev] Erro ao adicionar pontos:', error);
+    throw error;
+  }
+}
+
+export async function exportarEstadoCompleto() {
+  try {
+    const todasChaves = await AsyncStorage.getAllKeys();
+    const pares = await AsyncStorage.multiGet(todasChaves);
+    const estado = {};
+    for (const [chave, valor] of pares) {
+      try {
+        estado[chave] = JSON.parse(valor);
+      } catch {
+        estado[chave] = valor;
+      }
+    }
+    return estado;
+  } catch (error) {
+    console.error('[dev] Erro ao exportar estado:', error);
+    throw error;
+  }
+}
+
+----------------------------------------------------------------------
+ARQUIVO: src/services/LogicaApp.js
+----------------------------------------------------------------------
+// src/services/LogicaApp.js
+
+// aqui fica a lógica de negócio do app, o que acontece quando o usuário completa uma atividade
+
+import {
+  adicionarAcaoAoHistorico,
+  checarNovasConquistas,
+  carregarStreak,
+} from "./Armazenamento";
+
+import {
+  checarAtividadeJaFoiConcluidaHoje,  // era atividadeJaFoiConcluidaHoje
+  marcarAtividadeComoConcluida,
+} from "./atividades";
+
+export async function registrarAtividadeCompleta(atividade) {
+  try {
+    // verifica se essa atividade já foi concluída hoje
+    const jaFoiConcluidaHoje = await checarAtividadeJaFoiConcluidaHoje(atividade.id);
+
+
+    if (jaFoiConcluidaHoje) {
+      return {
+        sucesso: false,
+        erro: "Essa atividade já foi concluída hoje.",
+      };
+    }
+
+    // marca a atividade como concluída no dia atual
+    await marcarAtividadeComoConcluida(atividade.id);
+
+    // registra no histórico e soma os pontos da atividade
+    await adicionarAcaoAoHistorico(atividade.titulo, Number(atividade.pontos) || 0, atividade.id);
+
+
+    // pega o streak já atualizado
+    const streakInfo = await carregarStreak();
+
+    // checa se isso desbloqueou algum troféu
+    const conquistasDesbloqueadas = await checarNovasConquistas();
+
+    // retorna os dados para a interface
+    return {
+      sucesso: true,
+      novoStreak: streakInfo.contagem,
+      novosTrofeus: conquistasDesbloqueadas,
+    };
+  } catch (error) {
+    console.error("Erro ao concluir atividade:", error);
+
+    return {
+      sucesso: false,
+      erro: "Não foi possível concluir a atividade.",
+    };
+  }
+}
+
+export const calcularNovoStreak = (ultimaData, streakAtual) => {
+  const hoje = new Date().toDateString();
+  const ultima = new Date(ultimaData).toDateString();
+
+  // Se a última interação foi ontem, incrementa
+  const ontem = new Date();
+  ontem.setDate(ontem.getDate() - 1);
+
+  if (ultima === hoje) return streakAtual; // Mesmo dia, não faz nada
+  if (ultima === ontem.toDateString()) return streakAtual + 1; // Streak continua
+  return 1; // Perdeu o streak, reinicia em 1
+};
+
+----------------------------------------------------------------------
+ARQUIVO: src/services/atividades.js
+----------------------------------------------------------------------
+// src/services/atividades.js
+
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { categorias } from "../data/categorias";
+import { atividades } from "../data/atividades";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Chaves de armazenamento
+// ─────────────────────────────────────────────────────────────────────────────
+
+const C = {
+  atividadesPersonalizadas: "rat:atividadesPersonalizadas",
+  atividadesFavoritas: "rat:atividadesFavoritas",
+  atividadesConcluidasHoje: "rat:atividadesConcluidasHoje",
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Funções internas de apoio (não exportadas)
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function salvar(chave, valor) {
+  try {
+    await AsyncStorage.setItem(chave, JSON.stringify(valor));
+  } catch (error) {
+    console.error(`[atividadesService] Erro ao salvar "${chave}":`, error);
+    throw error;
+  }
+}
+
+async function carregar(chave, valorPadrao = null) {
+  try {
+    const texto = await AsyncStorage.getItem(chave);
+
+    if (texto != null) {
+      return JSON.parse(texto);
+    }
+
+    return valorPadrao;
+  } catch (error) {
+    console.error(`[atividadesService] Erro ao carregar "${chave}":`, error);
+    throw error;
+  }
+}
+
+async function remover(chave) {
+  try {
+    await AsyncStorage.removeItem(chave);
+  } catch (error) {
+    console.error(`[atividadesService] Erro ao remover "${chave}":`, error);
+    throw error;
+  }
+}
+
+function getChaveDoDia() {
+  const hoje = new Date();
+
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
+  const dia = String(hoje.getDate()).padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Categorias e atividades base
+// Esses dados vêm dos arquivos da pasta /data
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Retorna a lista de categorias cadastradas no app.
+export function carregarCategorias() {
+  return categorias;
+}
+
+// Retorna a lista de atividades padrão do app.
+export function carregarAtividadesBase() {
+  return atividades;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Atividades personalizadas
+// São atividades criadas pelo próprio usuário
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Retorna a lista de atividades personalizadas.
+// Se não houver nenhuma salva ainda, retorna [].
+export async function carregarAtividadesPersonalizadas() {
+  return carregar(C.atividadesPersonalizadas, []);
+}
+
+// Adiciona uma nova atividade personalizada à lista já salva.
+export async function adicionarAtividadePersonalizada(novaAtividade) {
+  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
+  const novaLista = [...atividadesPersonalizadas, novaAtividade];
+
+  await salvar(C.atividadesPersonalizadas, novaLista);
+
+  return novaAtividade;
+}
+
+// Remove uma atividade personalizada pelo id.
+export async function removerAtividadePersonalizada(idDaAtividade) {
+  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
+
+  const novaLista = atividadesPersonalizadas.filter((atividade) => {
+    return atividade.id !== idDaAtividade;
+  });
+
+  await salvar(C.atividadesPersonalizadas, novaLista);
+}
+
+// Apaga todas as atividades personalizadas salvas.
+export async function removerAtividadesPersonalizadas() {
+  await remover(C.atividadesPersonalizadas);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Lista completa de atividades
+// Junta as atividades padrão com as personalizadas
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Retorna todas as atividades do app.
+export async function carregarTodasAsAtividades() {
+  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
+  return [...atividades, ...atividadesPersonalizadas];
+}
+
+// Busca uma atividade pelo id.
+// Se não encontrar, retorna null.
+export async function buscarAtividadePorId(idDaAtividade) {
+  const todasAsAtividades = await carregarTodasAsAtividades();
+
+  const atividadeEncontrada = todasAsAtividades.find((item) => {
+    return item.id === idDaAtividade;
+  });
+
+  return atividadeEncontrada || null;
+}
+
+// Retorna apenas as atividades de uma categoria específica.
+export async function filtrarAtividadesPorCategoria(idDaCategoria) {
+  const todasAsAtividades = await carregarTodasAsAtividades();
+
+  return todasAsAtividades.filter((atividade) => {
+    return atividade.categoria === idDaCategoria;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Favoritas
+// Guarda apenas os ids das atividades marcadas como favoritas
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Retorna a lista de ids favoritos.
+// Se não houver nada salvo, retorna [].
+export async function carregarFavoritas() {
+  return carregar(C.atividadesFavoritas, []);
+}
+
+// Marca uma atividade como favorita.
+export async function favoritarAtividade(idDaAtividade) {
+  const favoritas = await carregarFavoritas();
+
+  if (favoritas.includes(idDaAtividade)) {
+    return favoritas;
+  }
+
+  const novaLista = [...favoritas, idDaAtividade];
+  await salvar(C.atividadesFavoritas, novaLista);
+
+  return novaLista;
+}
+
+// Remove uma atividade da lista de favoritas.
+export async function desfavoritarAtividade(idDaAtividade) {
+  const favoritas = await carregarFavoritas();
+
+  const novaLista = favoritas.filter((id) => {
+    return id !== idDaAtividade;
+  });
+
+  await salvar(C.atividadesFavoritas, novaLista);
+
+  return novaLista;
+}
+
+// Apaga toda a lista de favoritas.
+export async function removerFavoritas() {
+  await remover(C.atividadesFavoritas);
+}
+
+// Carrega as atividades concluídas de hoje e zera a lista automaticamente se o dia mudou.
+// { data: "2026-04-11", ids: ["atividade-1", "atividade-2"] }
+export async function carregarAtividadesConcluidas() {
+  const hoje = getChaveDoDia();
+
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
+
+  if (statusSalvo.data !== hoje) {
+    const novoStatus = {
+      data: hoje,
+      ids: [],
+    };
+
+    await salvar(C.atividadesConcluidasHoje, novoStatus);
+    return novoStatus.ids;
+  }
+
+  return statusSalvo.ids;
+}
+
+export async function checarAtividadeJaFoiConcluidaHoje(idDaAtividade) {
+  const concluidasHoje = await carregarAtividadesConcluidas();
+  return concluidasHoje.includes(idDaAtividade);
+}
+
+// Marca uma atividade como concluída no dia atual.
+export async function marcarAtividadeComoConcluida(idDaAtividade) {
+  const hoje = getChaveDoDia();
+
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
+
+  let statusAtual = statusSalvo;
+
+  if (statusSalvo.data !== hoje) {
+    statusAtual = {
+      data: hoje,
+      ids: [],
+    };
+  }
+
+  if (statusAtual.ids.includes(idDaAtividade)) {
+    return statusAtual.ids;
+  }
+
+  statusAtual.ids.push(idDaAtividade);
+
+  await salvar(C.atividadesConcluidasHoje, statusAtual);
+
+  return statusAtual.ids;
+}
+
+// Remove uma atividade da lista de concluídas do dia atual.
+export async function desmarcarAtividadeConcluida(idDaAtividade) {
+  const hoje = getChaveDoDia();
+
+  const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
+    data: hoje,
+    ids: [],
+  });
+
+  let statusAtual = statusSalvo;
+
+  if (statusSalvo.data !== hoje) {
+    statusAtual = {
+      data: hoje,
+      ids: [],
+    };
+  }
+
+  statusAtual.ids = statusAtual.ids.filter((id) => {
+    return id !== idDaAtividade;
+  });
+
+  await salvar(C.atividadesConcluidasHoje, statusAtual);
+
+  return statusAtual.ids;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Limpeza geral
+// Remove todos os dados relacionados às atividades
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Apaga atividades personalizadas, favoritas e o controle de concluídas do dia.
+export async function limparDadosDeAtividades() {
+  try {
+    await AsyncStorage.multiRemove([
+      C.atividadesPersonalizadas,
+      C.atividadesFavoritas,
+      C.atividadesConcluidasHoje,
+    ]);
+  } catch (error) {
+    console.error(
+      "[atividadesService] Erro ao limpar dados de atividades:",
+      error,
+    );
+    throw error;
+  }
+}
+
+
+----------------------------------------------------------------------
+ARQUIVO: src/services/estatisticas.js
+----------------------------------------------------------------------
+// scr/services/estatisticas.js
+
+import {
+  carregarHistorico,
+  carregarPontuacao,
+  carregarStreak,
+  tamanhoDoInventario,
+} from "./Armazenamento";
+
+// retorna o valor atual do streak
+export async function getStreakAtual() {
+  const streak = await carregarStreak();
+  return streak.contagem;
+}
+
+// retorna o total de ações já registradas no histórico
+export async function getTotalDeAcoes() {
+  const historico = await carregarHistorico();
+  return historico.length;
+}
+
+// retorna um resumo geral do usuário para usar na interface
+export async function getResumoDoUsuario() {
+  return {
+    totalDeAcoes: await getTotalDeAcoes(),
+    totalDePontos: await carregarPontuacao(),
+    streakAtual: await getStreakAtual(),
+    itensNoInventario: await tamanhoDoInventario(),
+  };
+}
+
+
+----------------------------------------------------------------------
+ARQUIVO: src/services/missao_service.js
+----------------------------------------------------------------------
+// src/services/MissaoService.js
+
+// logica de envio da missão do dia, 
+import { missoesGlobais } from '../data/missoes';
+
+export const getMissaoDoDia = () => {
+  const hoje = new Date();
+  
+  // Criamos um número único para o dia (ex: 20240410)
+  // Isso garante que a missão mude meia-noite
+  const semente = hoje.getFullYear() * 10000 + (hoje.getMonth() + 1) * 100 + hoje.getDate();
+  
+  // Usamos o resto da divisão pelo tamanho do array para escolher o índice
+  const indice = semente % missoesGlobais.length;
+  
+  return missoesGlobais[indice];
+};
+
+----------------------------------------------------------------------
+ARQUIVO: src/screens/SetupScreen.js
+----------------------------------------------------------------------
+import React, { useState } from 'react';
+import {
+  View, Text, TextInput, TouchableOpacity, ScrollView,
+  StyleSheet, Alert,
+} from 'react-native';
+
+import { atividades } from '../data/atividades';
+import { salvarNovoProgresso } from '../services/Armazenamento';
+import { useUser } from '../context/UserContext';
+
+export default function SetupScreen({ navigation }) {
+  const [nome, setNome] = useState('');
+  const [selecionadas, setSelecionadas] = useState([]);
+  const { atualizarDadosGlobais } = useUser();
+
+  function toggleAtividade(id) {
+    setSelecionadas(atual =>
+      atual.includes(id)
+        ? atual.filter(x => x !== id)
+        : [...atual, id]
+    );
+  }
+
+  async function confirmar() {
+    if (!nome.trim()) {
+      Alert.alert('Faltou o nome!', 'Digite seu nome para continuar.');
+      return;
+    }
+
+    // salva o progresso inicial com nome e atividades habituais
+    await salvarNovoProgresso({
+      nome: nome.trim(),
+      nivel: 1,
+      atividadesHabituais: selecionadas,
+      dataCriacao: new Date().toISOString(),
+    });
+
+    await atualizarDadosGlobais();
+    navigation.replace('Main');
+  }
+
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+
+      {/* Cabeçalho */}
+      <View style={styles.header}>
+        <Text style={styles.titulo}>GreenRats 🌱</Text>
+        <Text style={styles.subtitulo}>Vamos configurar seu perfil</Text>
+      </View>
+
+      {/* Campo de nome */}
+      <View style={styles.secao}>
+        <Text style={styles.label}>Como você se chama?</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Seu nome aqui..."
+          placeholderTextColor="#aaa"
+          value={nome}
+          onChangeText={setNome}
+          autoFocus
+        />
+      </View>
+
+      {/* Seleção de atividades */}
+      <View style={styles.secao}>
+        <Text style={styles.label}>O que você costuma fazer?</Text>
+        <Text style={styles.dica}>Toque nas atividades que já fazem parte da sua rotina.</Text>
+
+        <View style={styles.grade}>
+          {atividades.map(atividade => {
+            const marcada = selecionadas.includes(atividade.id);
+            return (
+              <TouchableOpacity
+                key={atividade.id}
+                style={[styles.cartaoAtividade, marcada && styles.cartaoMarcado]}
+                onPress={() => toggleAtividade(atividade.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.iconeAtividade}>{atividade.icone}</Text>
+                <Text style={[styles.tituloAtividade, marcada && styles.tituloMarcado]}>
+                  {atividade.titulo}
+                </Text>
+                <Text style={[styles.pontosAtividade, marcada && styles.pontosMarcado]}>
+                  +{atividade.pontos} pts
+                </Text>
+                {marcada && (
+                  <View style={styles.checkMark}>
+                    <Text style={styles.checkTexto}>✓</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      {/* Botão confirmar */}
+      <TouchableOpacity style={styles.botao} onPress={confirmar}>
+        <Text style={styles.botaoTexto}>Começar →</Text>
+      </TouchableOpacity>
+
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    padding: 24,
+    backgroundColor: '#f1f7ed',
+  },
+  header: {
+    alignItems: 'center',
+    marginTop: 60,
+    marginBottom: 32,
+  },
+  titulo: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#515a47',
+  },
+  subtitulo: {
+    fontSize: 16,
+    color: '#7ca982',
+    marginTop: 6,
+  },
+  secao: {
+    marginBottom: 28,
+  },
+  label: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#515a47',
+    marginBottom: 6,
+  },
+  dica: {
+    fontSize: 14,
+    color: '#888',
+    marginBottom: 16,
+  },
+  input: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e0eec6',
+    color: '#333',
+  },
+  grade: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  cartaoAtividade: {
+    width: '47%',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#e0eec6',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  cartaoMarcado: {
+    backgroundColor: '#e0eec6',
+    borderColor: '#7ca982',
+  },
+  iconeAtividade: {
+    fontSize: 28,
+    marginBottom: 8,
+  },
+  tituloAtividade: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#444',
+    textAlign: 'center',
+  },
+  tituloMarcado: {
+    color: '#515a47',
+  },
+  pontosAtividade: {
+    fontSize: 12,
+    color: '#aaa',
+    marginTop: 4,
+  },
+  pontosMarcado: {
+    color: '#7ca982',
+    fontWeight: '700',
+  },
+  checkMark: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: '#7ca982',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkTexto: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  botao: {
+    backgroundColor: '#515a47',
+    padding: 18,
+    borderRadius: 14,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  botaoTexto: {
+    color: '#f1f7ed',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+});
+
+----------------------------------------------------------------------
+ARQUIVO: src/screens/HomeScreen.js
+----------------------------------------------------------------------
+import React, { useState, useCallback } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, RefreshControl,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+
+import { atividades } from '../data/atividades';
+import { getMissaoDoDia } from '../services/missao_service';
+import { registrarAtividadeCompleta } from '../services/LogicaApp';
+import { carregarAtividadesConcluidas } from '../services/atividades';
+import { useUser } from '../context/UserContext';
+
+export default function HomeScreen() {
+  const { atualizarDadosGlobais } = useUser();
+  const [concluidasHoje, setConcluidasHoje] = useState([]);
+  const [missaoDoDia] = useState(() => getMissaoDoDia());
+  const [carregando, setCarregando] = useState(false);
+  const [feedbackId, setFeedbackId] = useState(null); // id da atividade com animação
+
+  // atualiza a lista de concluídas sempre que a tela ganha foco
+  useFocusEffect(
+    useCallback(() => {
+      async function carregar() {
+        const ids = await carregarAtividadesConcluidas();
+        setConcluidasHoje(ids);
+      }
+      carregar();
+    }, [])
+  );
+
+  async function handleRegistrar(atividade) {
+    if (concluidasHoje.includes(atividade.id)) return;
+    if (carregando) return;
+
+    setCarregando(true);
+    const resultado = await registrarAtividadeCompleta(atividade);
+
+    if (resultado.sucesso) {
+      setFeedbackId(atividade.id);
+      setConcluidasHoje(prev => [...prev, atividade.id]);
+      await atualizarDadosGlobais();
+
+      // remove o feedback visual após 1.5s
+      setTimeout(() => setFeedbackId(null), 1500);
+    }
+    setCarregando(false);
+  }
+
+  const totalHoje = atividades
+    .filter(a => concluidasHoje.includes(a.id))
+    .reduce((acc, a) => acc + a.pontos, 0);
+
+  return (
+    <ScrollView
+      style={styles.scroll}
+      contentContainerStyle={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={carregando} colors={['#515a47']} />
+      }
+    >
+
+      {/* Missão do dia */}
+      <View style={styles.missaoCard}>
+        <Text style={styles.missaoLabel}>🎯 Missão do dia</Text>
+        <Text style={styles.missaoTitulo}>{missaoDoDia.titulo}</Text>
+        <Text style={styles.missaoDescricao}>{missaoDoDia.descricao}</Text>
+        <View style={styles.missaoPontosRow}>
+          <Text style={styles.missaoPontos}>+{missaoDoDia.pontos} pts se completar</Text>
+        </View>
+      </View>
+
+      {/* Progresso do dia */}
+      <View style={styles.progressoRow}>
+        <Text style={styles.progressoTexto}>
+          {concluidasHoje.length} de {atividades.length} atividades hoje
+        </Text>
+        <Text style={styles.progressoPontos}>+{totalHoje} pts</Text>
+      </View>
+      <View style={styles.barraFundo}>
+        <View style={[
+          styles.barraPreenchida,
+          { width: `${atividades.length > 0 ? (concluidasHoje.length / atividades.length) * 100 : 0}%` }
+        ]} />
+      </View>
+
+      {/* Lista de atividades */}
+      <Text style={styles.secaoTitulo}>Atividades de hoje</Text>
+
+      {atividades.map(atividade => {
+        const feita = concluidasHoje.includes(atividade.id);
+        const feedback = feedbackId === atividade.id;
+
+        return (
+          <TouchableOpacity
+            key={atividade.id}
+            style={[
+              styles.cartao,
+              feita && styles.cartaoFeito,
+              feedback && styles.cartaoFeedback,
+            ]}
+            onPress={() => handleRegistrar(atividade)}
+            activeOpacity={feita ? 1 : 0.7}
+          >
+            <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
+            <View style={styles.cartaoInfo}>
+              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
+                {atividade.titulo}
+              </Text>
+              <Text style={styles.cartaoDescricao}>{atividade.descricao}</Text>
+            </View>
+            <View style={styles.cartaoPontosArea}>
+              {feedback ? (
+                <Text style={styles.feedbackTexto}>+{atividade.pontos}!</Text>
+              ) : feita ? (
+                <Text style={styles.checkFeito}>✓</Text>
+              ) : (
+                <Text style={styles.cartaoPontos}>+{atividade.pontos}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+
+      <View style={{ height: 24 }} />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scroll: { backgroundColor: '#f1f7ed' },
+  container: { padding: 20 },
+
+  // Missão
+  missaoCard: {
+    backgroundColor: '#515a47',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  missaoLabel: {
+    color: '#e0eec6',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  missaoTitulo: {
+    color: '#f1f7ed',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  missaoDescricao: {
+    color: '#c5d4b5',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  missaoPontosRow: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  missaoPontos: {
+    color: '#e0eec6',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  // Progresso
+  progressoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  progressoTexto: { fontSize: 13, color: '#666' },
+  progressoPontos: { fontSize: 13, fontWeight: '700', color: '#7ca982' },
+  barraFundo: {
+    height: 8,
+    backgroundColor: '#e0eec6',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  barraPreenchida: {
+    height: '100%',
+    backgroundColor: '#7ca982',
+    borderRadius: 4,
+  },
+
+  // Seção
+  secaoTitulo: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#515a47',
+    marginBottom: 12,
+  },
+
+  // Cartão de atividade
+  cartao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#e0eec6',
+  },
+  cartaoFeito: {
+    backgroundColor: '#f1f7ed',
+    borderColor: '#7ca982',
+    opacity: 0.8,
+  },
+  cartaoFeedback: {
+    borderColor: '#c2a83e',
+    backgroundColor: '#fffbe6',
+  },
+  cartaoIcone: {
+    fontSize: 28,
+    marginRight: 14,
+  },
+  cartaoInfo: {
+    flex: 1,
+  },
+  cartaoTitulo: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+  },
+  cartaoTituloFeito: {
+    color: '#7ca982',
+    textDecorationLine: 'line-through',
+  },
+  cartaoDescricao: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 3,
+  },
+  cartaoPontosArea: {
+    minWidth: 44,
+    alignItems: 'center',
+  },
+  cartaoPontos: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#c2a83e',
+  },
+  checkFeito: {
+    fontSize: 20,
+    color: '#7ca982',
+    fontWeight: 'bold',
+  },
+  feedbackTexto: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#c2a83e',
+  },
+});
+
+----------------------------------------------------------------------
+ARQUIVO: src/screens/ConquistasScreen.js
+----------------------------------------------------------------------
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+
+import { conquistas } from '../data/conquistas';
+import {
+  carregarConquistasGanhas,
+  carregarHistorico,
+  carregarPontuacao,
+  carregarStreak,
+} from '../services/Armazenamento';
+
+export default function ConquistasScreen() {
+  const [conquistasGanhas, setConquistasGanhas] = useState([]);
+  const [historico, setHistorico] = useState([]);
+  const [pontos, setPontos] = useState(0);
+  const [streak, setStreak] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      async function carregar() {
+        const cg = await carregarConquistasGanhas();
+        const h = await carregarHistorico();
+        const p = await carregarPontuacao();
+        const s = await carregarStreak();
+
+        setConquistasGanhas(cg.ganhas || []);
+        setHistorico(h);
+        setPontos(p);
+        setStreak(s.contagem);
+      }
+      carregar();
+    }, [])
+  );
+
+  // agrupa o histórico por categoria para o mini relatório
+  const acoesPorCategoria = historico.reduce((acc, item) => {
+    acc[item.acao] = (acc[item.acao] || 0) + 1;
+    return acc;
+  }, {});
+
+  const topAcoes = Object.entries(acoesPorCategoria)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+
+  return (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+
+      {/* Mini relatório */}
+      <View style={styles.relatorioCard}>
+        <Text style={styles.relatorioTitulo}>📊 Seu resumo</Text>
+
+        <View style={styles.statsRow}>
+          <View style={styles.statItem}>
+            <Text style={styles.statNumero}>{historico.length}</Text>
+            <Text style={styles.statLabel}>ações</Text>
+          </View>
+          <View style={styles.separador} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumero}>{pontos}</Text>
+            <Text style={styles.statLabel}>pontos</Text>
+          </View>
+          <View style={styles.separador} />
+          <View style={styles.statItem}>
+            <Text style={styles.statNumero}>{streak}</Text>
+            <Text style={styles.statLabel}>dias streak</Text>
+          </View>
+        </View>
+
+        {topAcoes.length > 0 && (
+          <View style={styles.topAcoes}>
+            <Text style={styles.topTitulo}>Suas ações mais frequentes:</Text>
+            {topAcoes.map(([acao, qtd], i) => (
+              <View key={acao} style={styles.topItem}>
+                <Text style={styles.topPos}>{i + 1}°</Text>
+                <Text style={styles.topAcao} numberOfLines={1}>{acao}</Text>
+                <Text style={styles.topQtd}>{qtd}x</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {historico.length === 0 && (
+          <Text style={styles.semDados}>
+            Registre suas primeiras ações na aba Hoje 🌿
+          </Text>
+        )}
+      </View>
+
+      {/* Conquistas */}
+      <Text style={styles.secaoTitulo}>
+        Conquistas — {conquistasGanhas.length}/{conquistas.length}
+      </Text>
+
+      {conquistas.map(conquista => {
+        const ganhou = conquistasGanhas.includes(conquista.id);
+
+        return (
+          <View
+            key={conquista.id}
+            style={[styles.conquistaCard, !ganhou && styles.conquistaBloqueada]}
+          >
+            <Text style={[styles.conquistaIcone, !ganhou && { opacity: 0.3 }]}>
+              {conquista.icone}
+            </Text>
+            <View style={styles.conquistaInfo}>
+              <Text style={[styles.conquistaTitulo, !ganhou && styles.conquistaTextoBloqueado]}>
+                {conquista.titulo}
+              </Text>
+              <Text style={[styles.conquistaDescricao, !ganhou && styles.conquistaTextoBloqueado]}>
+                {conquista.descricao}
+              </Text>
+              {!ganhou && (
+                <View style={styles.progressoConquista}>
+                  <Text style={styles.progressoConquistaTexto}>
+                    Meta: {conquista.objetivo} {conquista.tipo === 'max_streak' ? 'dias de streak' : 'ações'}
+                  </Text>
+                </View>
+              )}
+            </View>
+            {ganhou && (
+              <View style={styles.conquistaBadge}>
+                <Text style={styles.conquistaBadgeTexto}>✓</Text>
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {/* Histórico recente */}
+      {historico.length > 0 && (
+        <>
+          <Text style={styles.secaoTitulo}>Histórico recente</Text>
+          {historico.slice(0, 10).map(item => (
+            <View key={item.id} style={styles.historicoItem}>
+              <View style={styles.historicoInfo}>
+                <Text style={styles.historicoAcao}>{item.acao}</Text>
+                <Text style={styles.historicoData}>
+                  {new Date(item.data).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: 'short',
+                  })}
+                </Text>
+              </View>
+              <Text style={styles.historicoPontos}>+{item.pontos} pts</Text>
+            </View>
+          ))}
+        </>
+      )}
+
+      <View style={{ height: 32 }} />
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  scroll: { backgroundColor: '#f1f7ed' },
+  container: { padding: 20 },
+
+  // Relatório
+  relatorioCard: {
+    backgroundColor: '#515a47',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  relatorioTitulo: {
+    color: '#e0eec6',
+    fontSize: 14,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 16,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  statItem: { alignItems: 'center' },
+  statNumero: {
+    color: '#f1f7ed',
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  statLabel: {
+    color: '#a8c09a',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  separador: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  topAcoes: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.15)',
+    paddingTop: 14,
+  },
+  topTitulo: {
+    color: '#c5d4b5',
+    fontSize: 12,
+    marginBottom: 8,
+  },
+  topItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  topPos: {
+    color: '#c2a83e',
+    fontWeight: 'bold',
+    width: 24,
+    fontSize: 13,
+  },
+  topAcao: {
+    flex: 1,
+    color: '#f1f7ed',
+    fontSize: 13,
+  },
+  topQtd: {
+    color: '#7ca982',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  semDados: {
+    color: '#a8c09a',
+    textAlign: 'center',
+    fontSize: 14,
+    marginTop: 8,
+  },
+
+  // Seção
+  secaoTitulo: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#515a47',
+    marginBottom: 12,
+  },
+
+  // Conquistas
+  conquistaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#c2a83e',
+  },
+  conquistaBloqueada: {
+    borderColor: '#e0eec6',
+    backgroundColor: '#f8faf5',
+  },
+  conquistaIcone: {
+    fontSize: 32,
+    marginRight: 14,
+  },
+  conquistaInfo: { flex: 1 },
+  conquistaTitulo: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#515a47',
+  },
+  conquistaTextoBloqueado: {
+    color: '#bbb',
+  },
+  conquistaDescricao: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 3,
+  },
+  progressoConquista: {
+    marginTop: 6,
+  },
+  progressoConquistaTexto: {
+    fontSize: 11,
+    color: '#aaa',
+  },
+  conquistaBadge: {
+    backgroundColor: '#c2a83e',
+    borderRadius: 12,
+    width: 28,
+    height: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  conquistaBadgeTexto: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+
+  // Histórico
+  historicoItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#7ca982',
+  },
+  historicoInfo: { flex: 1 },
+  historicoAcao: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  historicoData: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 2,
+  },
+  historicoPontos: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#7ca982',
+  },
+});
+
+----------------------------------------------------------------------
+ARQUIVO: src/screens/Loja_Screen.js
+----------------------------------------------------------------------
+import React from 'react';
+import { View, Text } from 'react-native';
+
+export default function NomeDaTela() {
+  return <View><Text>Em construção</Text></View>;
+}
+
+----------------------------------------------------------------------
+ARQUIVO: src/screens/PerfilScreen.js
+----------------------------------------------------------------------
+
+
+----------------------------------------------------------------------
+ARQUIVO: src/components/PontosHeader.js
+----------------------------------------------------------------------
+// src/components/PontosHeader.js
+// Modificação: adiciona detector de 5 toques rápidos no nome/streak
+// para abrir a DevScreen (sem aparecer para usuários normais).
+
+import React, { useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { useUser } from '../context/UserContext';
+
+// Constantes do easter egg
+const TOQUES_NECESSARIOS = 5;
+const JANELA_MS = 2000; // os 5 toques precisam ocorrer em 2 segundos
+
+export default function PontosHeader() {
+  const navigation = useNavigation();
+  const { nome, pontos, streak } = useUser();
+
+  // ── Detector de toques rápidos ──────────────────────────────────────────
+  const toquesRef = useRef(0);
+  const timerRef = useRef(null);
+
+  const handleToque = useCallback(() => {
+    toquesRef.current += 1;
+
+    // Reinicia o timer a cada toque
+    if (timerRef.current) clearTimeout(timerRef.current);
+
+    if (toquesRef.current >= TOQUES_NECESSARIOS) {
+      toquesRef.current = 0;
+      navigation.navigate('Dev');
+      return;
+    }
+
+    // Se não chegou em 5 dentro da janela, reseta o contador
+    timerRef.current = setTimeout(() => {
+      toquesRef.current = 0;
+    }, JANELA_MS);
+  }, [navigation]);
+
+  // ── Render ───────────────────────────────────────────────────────────────
+  return (
+    <View style={s.container}>
+      {/* Área clicável para o easter egg — nome + streak */}
+      <TouchableOpacity
+        onPress={handleToque}
+        activeOpacity={1} // sem feedback visual para não chamar atenção
+        style={s.infoEsquerda}
+      >
+        <Text style={s.nome} numberOfLines={1}>
+          {nome ?? 'Eco Rato'}
+        </Text>
+        <Text style={s.streak}>🔥 {streak ?? 0} dias</Text>
+      </TouchableOpacity>
+
+      {/* Pontos — lado direito, sem toque especial */}
+      <View style={s.pontosContainer}>
+        <Text style={s.pontosValor}>⭐ {pontos ?? 0}</Text>
+        <Text style={s.pontosLabel}>pts</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Estilos ──────────────────────────────────────────────────────────────────
+// Mantém a mesma aparência visual do header original.
+// Ajuste conforme seu theme.js quando ele for implementado.
+const s = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#515a47',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  infoEsquerda: {
+    flex: 1,
+    marginRight: 12,
+  },
+  nome: {
+    color: '#f1f7ed',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  streak: {
+    color: '#e0eec6',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  pontosContainer: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 2,
+  },
+  pontosValor: {
+    color: '#c2a83e',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  pontosLabel: {
+    color: '#c2a83e',
+    fontSize: 11,
+    marginLeft: 2,
+  },
+});
+
+
+----------------------------------------------------------------------
+ARQUIVO: package.json
+----------------------------------------------------------------------
+{
+  "name": "green-rats",
+  "version": "1.0.0",
+  "private": true,
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~6.1.2",
+    "@react-native-async-storage/async-storage": "^2.2.0",
+    "@react-navigation/bottom-tabs": "^7.17.2",
+    "@react-navigation/native": "^7.3.0",
+    "@react-navigation/native-stack": "^7.17.2",
+    "expo": "~54.0.33",
+    "react": "^19.1.0",
+    "react-dom": "19.1.0",
+    "react-native": "^0.81.5",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "react-native-web": "^0.21.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.2"
+  }
+}
+

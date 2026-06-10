@@ -8,3 +8,7 @@ yarn-debug.log*
 yarn-error.log*
 .DS_Store
 Thumbs.db
+.vscode/
+package-lock.json
+eas.json
+package.json

@@ -71,7 +71,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#515a47',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 18,
   },
   infoEsquerda: {
     flex: 1,

@@ -7,15 +7,11 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
-import { verificarViradaDeDia } from '../services/Armazenamento';
 import { atividades } from '../data/atividades';
 import { getMissaoDoDia } from '../services/missao_service';
 import { registrarAtividadeCompleta } from '../services/LogicaApp';
 import { carregarAtividadesConcluidas } from '../services/atividades';
 import { useUser } from '../context/UserContext';
-
-const atividadesPositivas = atividades.filter(a => a.pontos >= 0);
-const atividadesNegativas = atividades.filter(a => a.pontos < 0);
 
 export default function HomeScreen() {
   const { atualizarDadosGlobais } = useUser();
@@ -24,22 +20,19 @@ export default function HomeScreen() {
   const [carregando, setCarregando] = useState(false);
   const [feedbackId, setFeedbackId] = useState(null);
 
-  // Roda toda vez que a tela recebe foco (ao navegar de volta, ao abrir o app).
-  // É aqui que a virada de dia real é detectada.
   useFocusEffect(
     useCallback(() => {
-      async function checarECarregar() {
-        await verificarViradaDeDia();
+      async function carregar() {
         const ids = await carregarAtividadesConcluidas();
-        setConcluidasHoje(ids || []);
-        await atualizarDadosGlobais();
+        setConcluidasHoje(ids);
       }
-      checarECarregar();
-    }, [atualizarDadosGlobais])
+      carregar();
+    }, [])
   );
 
   async function handleRegistrar(atividade) {
-    if (concluidasHoje.includes(atividade.id) || carregando) return;
+    if (concluidasHoje.includes(atividade.id)) return;
+    if (carregando) return;
 
     setCarregando(true);
     const resultado = await registrarAtividadeCompleta(atividade);
@@ -53,22 +46,9 @@ export default function HomeScreen() {
     setCarregando(false);
   }
 
-  // Totais do dia — só atividades positivas contam para a barra de progresso
   const totalHoje = atividades
     .filter(a => concluidasHoje.includes(a.id))
     .reduce((acc, a) => acc + a.pontos, 0);
-
-  const totalCarbono = atividades
-    .filter(a => concluidasHoje.includes(a.id) && a.carbonoKg && a.carbonoKg > 0)
-    .reduce((acc, a) => acc + a.carbonoKg, 0);
-
-  const positivasFeitas = concluidasHoje.filter(id =>
-    atividadesPositivas.some(a => a.id === id)
-  ).length;
-
-  const porcentagemProgresso = atividadesPositivas.length > 0
-    ? (positivasFeitas / atividadesPositivas.length) * 100
-    : 0;
 
   return (
     <ScrollView
@@ -78,7 +58,6 @@ export default function HomeScreen() {
         <RefreshControl refreshing={carregando} colors={['#515a47']} />
       }
     >
-
       {/* Missão do dia */}
       <View style={styles.missaoCard}>
         <Text style={styles.missaoLabel}>🎯 Missão do dia</Text>
@@ -92,29 +71,24 @@ export default function HomeScreen() {
       {/* Progresso do dia */}
       <View style={styles.progressoRow}>
         <Text style={styles.progressoTexto}>
-          {positivasFeitas} de {atividadesPositivas.length} atividades hoje
+          {concluidasHoje.length} de {atividades.length} atividades hoje
         </Text>
-        <View style={styles.progressoDireita}>
-          <Text style={styles.progressoPontos}>
-            {totalHoje >= 0 ? '+' : ''}{totalHoje} pts
-          </Text>
-          {totalCarbono > 0 && (
-            <Text style={styles.progressoCarbono}>
-              -{totalCarbono.toFixed(2)} kgCO₂e
-            </Text>
-          )}
-        </View>
+        <Text style={styles.progressoPontos}>+{totalHoje} pts</Text>
       </View>
       <View style={styles.barraFundo}>
-        <View style={[styles.barraPreenchida, { width: `${porcentagemProgresso}%` }]} />
+        <View style={[
+          styles.barraPreenchida,
+          { width: `${atividades.length > 0 ? (concluidasHoje.length / atividades.length) * 100 : 0}%` },
+        ]} />
       </View>
 
-      {/* Atividades positivas */}
+      {/* Lista de atividades */}
       <Text style={styles.secaoTitulo}>Atividades de hoje</Text>
 
-      {atividadesPositivas.map(atividade => {
+      {atividades.map(atividade => {
         const feita = concluidasHoje.includes(atividade.id);
         const feedback = feedbackId === atividade.id;
+        const pontosPositivo = atividade.pontos > 0;
 
         return (
           <TouchableOpacity
@@ -123,82 +97,50 @@ export default function HomeScreen() {
               styles.cartao,
               feita && styles.cartaoFeito,
               feedback && styles.cartaoFeedback,
+              !pontosPositivo && styles.cartaoNegativo,
             ]}
             onPress={() => handleRegistrar(atividade)}
             activeOpacity={feita ? 1 : 0.7}
           >
             <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
+
             <View style={styles.cartaoInfo}>
               <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
                 {atividade.titulo}
               </Text>
-              {atividade.carbonoKg && atividade.carbonoKg > 0 && (
+
+              {/* Descrição curta */}
+              <Text style={styles.cartaoDescricao} numberOfLines={2}>
+                {atividade.descricao}
+              </Text>
+
+              {/* Carbono — só mostra se existir e for positivo */}
+              {atividade.carbonoKg != null && atividade.carbonoKg > 0 && (
                 <Text style={styles.cartaoCarbono}>
-                  -{atividade.carbonoKg} kgCO₂e
+                  🌍 -{atividade.carbonoKg} kgCO₂e
                 </Text>
               )}
             </View>
+
             <View style={styles.cartaoPontosArea}>
               {feedback ? (
                 <Text style={styles.feedbackTexto}>+{atividade.pontos}!</Text>
               ) : feita ? (
                 <Text style={styles.checkFeito}>✓</Text>
               ) : (
-                <Text style={styles.cartaoPontos}>+{atividade.pontos}</Text>
-              )}
-            </View>
-          </TouchableOpacity>
-        );
-      })}
-
-      {/* Atividades negativas */}
-      <Text style={[styles.secaoTitulo, styles.secaoNegativaTitulo]}>
-        Seja honesto — registre também o que não foi legal
-      </Text>
-      <Text style={styles.secaoSubtitulo}>
-        Registrar ações negativas ajuda você a entender sua pegada real.
-      </Text>
-
-      {atividadesNegativas.map(atividade => {
-        const feita = concluidasHoje.includes(atividade.id);
-        const feedback = feedbackId === atividade.id;
-
-        return (
-          <TouchableOpacity
-            key={atividade.id}
-            style={[
-              styles.cartao,
-              styles.cartaoNegativo,
-              feita && styles.cartaoNegativoFeito,
-            ]}
-            onPress={() => handleRegistrar(atividade)}
-            activeOpacity={feita ? 1 : 0.7}
-          >
-            <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
-            <View style={styles.cartaoInfo}>
-              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
-                {atividade.titulo}
-              </Text>
-              {atividade.carbonoKg && atividade.carbonoKg < 0 && (
-                <Text style={[styles.cartaoCarbono, styles.cartaoCarbonNegativo]}>
-                  +{Math.abs(atividade.carbonoKg)} kgCO₂e emitidos
+                <Text style={[
+                  styles.cartaoPontos,
+                  !pontosPositivo && styles.cartaoPontosNegativo,
+                ]}>
+                  {atividade.pontos > 0 ? '+' : ''}{atividade.pontos}
                 </Text>
               )}
             </View>
-            <View style={styles.cartaoPontosArea}>
-              {feedback ? (
-                <Text style={styles.feedbackNegativoTexto}>{atividade.pontos}!</Text>
-              ) : feita ? (
-                <Text style={styles.checkFeito}>✓</Text>
-              ) : (
-                <Text style={styles.cartaoPontosNegativo}>{atividade.pontos}</Text>
-              )}
-            </View>
           </TouchableOpacity>
         );
       })}
 
-      <View style={{ height: 32 }} />
+      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -207,7 +149,6 @@ const styles = StyleSheet.create({
   scroll: { backgroundColor: '#f1f7ed' },
   container: { padding: 20 },
 
-  // Missão
   missaoCard: {
     backgroundColor: '#515a47',
     borderRadius: 16,
@@ -240,23 +181,15 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     alignSelf: 'flex-start',
   },
-  missaoPontos: {
-    color: '#e0eec6',
-    fontWeight: '700',
-    fontSize: 13,
-  },
+  missaoPontos: { color: '#e0eec6', fontWeight: '700', fontSize: 13 },
 
-  // Progresso
   progressoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
     marginBottom: 8,
   },
   progressoTexto: { fontSize: 13, color: '#666' },
-  progressoDireita: { alignItems: 'flex-end' },
   progressoPontos: { fontSize: 13, fontWeight: '700', color: '#7ca982' },
-  progressoCarbono: { fontSize: 11, color: '#515a47', marginTop: 2 },
   barraFundo: {
     height: 8,
     backgroundColor: '#e0eec6',
@@ -270,28 +203,16 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 
-  // Seções
   secaoTitulo: {
     fontSize: 16,
     fontWeight: '700',
     color: '#515a47',
     marginBottom: 12,
   },
-  secaoNegativaTitulo: {
-    color: '#a05050',
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  secaoSubtitulo: {
-    fontSize: 12,
-    color: '#888',
-    marginBottom: 12,
-  },
 
-  // Cartão base
   cartao: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#fff',
     borderRadius: 14,
     padding: 16,
@@ -302,43 +223,64 @@ const styles = StyleSheet.create({
   cartaoFeito: {
     backgroundColor: '#f1f7ed',
     borderColor: '#7ca982',
-    opacity: 0.85,
+    opacity: 0.8,
   },
   cartaoFeedback: {
     borderColor: '#c2a83e',
     backgroundColor: '#fffbe6',
   },
+  // atividades negativas (pontos < 0) ganham borda avermelhada sutil
   cartaoNegativo: {
-    borderColor: '#f5c6c6',
-    backgroundColor: '#fff8f8',
+    borderColor: '#e8c4c4',
   },
-  cartaoNegativoFeito: {
-    borderColor: '#d08080',
-    opacity: 0.85,
+  cartaoIcone: {
+    fontSize: 28,
+    marginRight: 14,
+    marginTop: 2,
   },
-
-  // Conteúdo do cartão
-  cartaoIcone: { fontSize: 28, marginRight: 14 },
   cartaoInfo: { flex: 1 },
-  cartaoTitulo: { fontSize: 15, fontWeight: '600', color: '#333' },
+  cartaoTitulo: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 3,
+  },
   cartaoTituloFeito: {
     color: '#7ca982',
     textDecorationLine: 'line-through',
   },
+  cartaoDescricao: {
+    fontSize: 12,
+    color: '#888',
+    lineHeight: 17,
+  },
   cartaoCarbono: {
     fontSize: 11,
-    color: '#7ca982',
-    marginTop: 3,
+    color: '#515a47',
+    fontWeight: '600',
+    marginTop: 5,
   },
-  cartaoCarbonNegativo: {
+  cartaoPontosArea: {
+    minWidth: 44,
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  cartaoPontos: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#c2a83e',
+  },
+  cartaoPontosNegativo: {
     color: '#c05050',
   },
-
-  // Área de pontos
-  cartaoPontosArea: { minWidth: 44, alignItems: 'center' },
-  cartaoPontos: { fontSize: 14, fontWeight: '700', color: '#c2a83e' },
-  cartaoPontosNegativo: { fontSize: 14, fontWeight: '700', color: '#c05050' },
-  checkFeito: { fontSize: 20, color: '#7ca982', fontWeight: 'bold' },
-  feedbackTexto: { fontSize: 16, fontWeight: 'bold', color: '#c2a83e' },
-  feedbackNegativoTexto: { fontSize: 16, fontWeight: 'bold', color: '#c05050' },
+  checkFeito: {
+    fontSize: 20,
+    color: '#7ca982',
+    fontWeight: 'bold',
+  },
+  feedbackTexto: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#c2a83e',
+  },
 });

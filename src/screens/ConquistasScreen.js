@@ -1,11 +1,16 @@
 // src/screens/ConquistasScreen.js
 
-import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useState, useCallback, useRef } from 'react';
+import {
+  View, Text, ScrollView, StyleSheet,
+  TouchableOpacity, ActivityIndicator, Alert, Platform,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { useUser } from '../context/UserContext';
+import StoryCard from '../components/StoryCard';
 import { conquistas } from '../data/conquistas';
-import { atividades as listaAtividades } from '../data/atividades';
 import {
   carregarConquistasGanhas,
   carregarHistorico,
@@ -13,10 +18,13 @@ import {
   carregarStreak,
 } from '../services/Armazenamento';
 
-// mapa de id -> carbonoKg para lookup rápido
+// ✅ CORREÇÃO: era 'listaAtividades', o export correto é 'atividades'
+import { atividades } from '../data/atividades';
+
+// mapa id -> carbonoKg para lookup rápido
 const carbonoPorId = {};
-listaAtividades.forEach((a) => {
-  if (a.carbonoKg && a.carbonoKg > 0) {
+atividades.forEach((a) => {
+  if (a.carbonoKg != null && a.carbonoKg > 0) {
     carbonoPorId[a.id] = a.carbonoKg;
   }
 });
@@ -28,6 +36,34 @@ export default function ConquistasScreen() {
   const [streak, setStreak] = useState(0);
   const [totalCarbono, setTotalCarbono] = useState(0);
 
+  const { nome, nivel } = useUser();
+  const cardRef = useRef(null);
+  const [compartilhando, setCompartilhando] = useState(false);
+
+  const handleCompartilhar = async () => {
+    if (Platform.OS === 'web') {
+      alert('📸 O compartilhamento de Stories só funciona rodando no celular!');
+      return;
+    }
+    setCompartilhando(true);
+    try {
+      const uri = await captureRef(cardRef.current, {
+        format: 'png',
+        quality: 1,
+        result: 'tmpfile',
+      });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/png',
+        dialogTitle: 'Compartilhar no Instagram',
+      });
+    } catch (e) {
+      console.error(e);
+      Alert.alert('Ops', 'Não foi possível gerar a imagem. Tente novamente.');
+    } finally {
+      setCompartilhando(false);
+    }
+  };
+
   useFocusEffect(
     useCallback(() => {
       async function carregar() {
@@ -36,8 +72,6 @@ export default function ConquistasScreen() {
         const p = await carregarPontuacao();
         const s = await carregarStreak();
 
-        // calcula kgCO2e total economizado
-        // usa o idAtividade salvo no histórico para buscar carbonoKg
         const carbono = h.reduce((acc, item) => {
           if (item.idAtividade && carbonoPorId[item.idAtividade]) {
             return acc + carbonoPorId[item.idAtividade];
@@ -48,7 +82,7 @@ export default function ConquistasScreen() {
         setConquistasGanhas(cg.ganhas || []);
         setHistorico(h);
         setPontos(p);
-        setStreak(s.contagem);
+        setStreak(s?.contagem || 0);
         setTotalCarbono(carbono);
       }
       carregar();
@@ -88,7 +122,6 @@ export default function ConquistasScreen() {
           </View>
         </View>
 
-        {/* Carbono economizado — destaque */}
         {totalCarbono > 0 && (
           <View style={styles.carbonoCard}>
             <Text style={styles.carbonoNumero}>{totalCarbono.toFixed(2)}</Text>
@@ -128,7 +161,6 @@ export default function ConquistasScreen() {
 
       {conquistas.map((conquista) => {
         const ganhou = conquistasGanhas.includes(conquista.id);
-
         return (
           <View
             key={conquista.id}
@@ -190,12 +222,10 @@ export default function ConquistasScreen() {
                     )}
                   </View>
                 </View>
-                <Text
-                  style={[
-                    styles.historicoPontos,
-                    item.pontos < 0 && styles.historicoPontosNegativo,
-                  ]}
-                >
+                <Text style={[
+                  styles.historicoPontos,
+                  item.pontos < 0 && styles.historicoPontosNegativo,
+                ]}>
                   {item.pontos > 0 ? '+' : ''}{item.pontos} pts
                 </Text>
               </View>
@@ -203,6 +233,31 @@ export default function ConquistasScreen() {
           })}
         </>
       )}
+
+      {/* Botão de story */}
+      <TouchableOpacity
+        style={stylesExtra.botaoStory}
+        onPress={handleCompartilhar}
+        disabled={compartilhando}
+        activeOpacity={0.8}
+      >
+        {compartilhando
+          ? <ActivityIndicator color="#fff" size="small" />
+          : <Text style={stylesExtra.botaoStoryTexto}>📸 Gerar story para o Instagram</Text>
+        }
+      </TouchableOpacity>
+
+      {/* Card invisível para captura */}
+      <View ref={cardRef} style={stylesExtra.cardOculto} collapsable={false}>
+        <StoryCard
+          nome={nome}
+          pontos={pontos}
+          streak={streak}
+          nivel={nivel}
+          topAcoes={topAcoes}
+          totalConquistas={conquistasGanhas.length}
+        />
+      </View>
 
       <View style={{ height: 32 }} />
     </ScrollView>
@@ -213,7 +268,6 @@ const styles = StyleSheet.create({
   scroll: { backgroundColor: '#f1f7ed' },
   container: { padding: 20 },
 
-  // Relatório
   relatorioCard: {
     backgroundColor: '#515a47',
     borderRadius: 16,
@@ -242,7 +296,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
 
-  // Carbono
   carbonoCard: {
     backgroundColor: 'rgba(194, 168, 62, 0.2)',
     borderRadius: 10,
@@ -252,16 +305,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#c2a83e',
   },
-  carbonoNumero: {
-    color: '#c2a83e',
-    fontSize: 34,
-    fontWeight: 'bold',
-  },
-  carbonoUnidade: {
-    color: '#e0eec6',
-    fontSize: 13,
-    marginTop: 2,
-  },
+  carbonoNumero: { color: '#c2a83e', fontSize: 34, fontWeight: 'bold' },
+  carbonoUnidade: { color: '#e0eec6', fontSize: 13, marginTop: 2 },
   carbonoComparacao: {
     color: '#a8c09a',
     fontSize: 11,
@@ -269,24 +314,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  // Top ações
   topAcoes: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.15)',
     paddingTop: 14,
   },
   topTitulo: { color: '#c5d4b5', fontSize: 12, marginBottom: 8 },
-  topItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
+  topItem: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   topPos: { color: '#c2a83e', fontWeight: 'bold', width: 24, fontSize: 13 },
   topAcao: { flex: 1, color: '#f1f7ed', fontSize: 13 },
   topQtd: { color: '#7ca982', fontWeight: '700', fontSize: 13 },
   semDados: { color: '#a8c09a', textAlign: 'center', fontSize: 14, marginTop: 8 },
 
-  // Seção
   secaoTitulo: {
     fontSize: 16,
     fontWeight: '700',
@@ -294,7 +333,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
 
-  // Conquistas
   conquistaCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -305,17 +343,10 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#c2a83e',
   },
-  conquistaBloqueada: {
-    borderColor: '#e0eec6',
-    backgroundColor: '#f8faf5',
-  },
+  conquistaBloqueada: { borderColor: '#e0eec6', backgroundColor: '#f8faf5' },
   conquistaIcone: { fontSize: 32, marginRight: 14 },
   conquistaInfo: { flex: 1 },
-  conquistaTitulo: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#515a47',
-  },
+  conquistaTitulo: { fontSize: 15, fontWeight: '700', color: '#515a47' },
   conquistaTextoBloqueado: { color: '#bbb' },
   conquistaDescricao: { fontSize: 12, color: '#666', marginTop: 3 },
   progressoConquistaTexto: { fontSize: 11, color: '#aaa', marginTop: 4 },
@@ -329,7 +360,6 @@ const styles = StyleSheet.create({
   },
   conquistaBadgeTexto: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
-  // Histórico
   historicoItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -346,10 +376,24 @@ const styles = StyleSheet.create({
   historicoMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   historicoData: { fontSize: 12, color: '#999' },
   historicoCarbono: { fontSize: 11, color: '#515a47', marginLeft: 4 },
-  historicoPontos: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#7ca982',
-  },
+  historicoPontos: { fontSize: 14, fontWeight: '700', color: '#7ca982' },
   historicoPontosNegativo: { color: '#c05050' },
+});
+
+const stylesExtra = StyleSheet.create({
+  botaoStory: {
+    backgroundColor: '#515a47',
+    borderRadius: 14,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  botaoStoryTexto: { color: '#f1f7ed', fontWeight: '700', fontSize: 15 },
+  cardOculto: {
+    position: 'absolute',
+    left: -9999,
+    top: 0,
+    opacity: 0,
+  },
 });

@@ -12,8 +12,10 @@ Gerado automaticamente por exportar_projeto.py
 ├── App.js
 ├── CONTRIBUTING.md
 ├── NavigationLayout.js
+├── app.json
 ├── assets
 │   └── README.md
+├── eas.json
 ├── export_code.py
 ├── package-lock.json
 ├── package.json
@@ -810,156 +812,177 @@ ARQUIVO: src/services/Armazenamento.js
 ----------------------------------------------------------------------
 // src/services/Armazenamento.js
 
-// arquivo responsável por toda a lógica de armazenamento local do app, usando AsyncStorage para guardar os dados no celular do usuário
-// vai ficar desorganizado no começo, mas a ideia é ir melhorando e organizando conforme o desenvolvimento do app avança
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// chaves de armazenamento para organizar os dados salvos no celular
 const CHAVES = {
   progresso: "rat:progresso",
   objetivos: "rat:objetivos",
   historico: "rat:historico",
   pontuacao: "rat:pontuacao",
   streak: "rat:streak",
-  inventario: "rat:inventario", // itens já comprados
+  inventario: "rat:inventario",
   conquistas: "rat:conquistas",
+  dataSimulada: "rat:dataSimulada", // usado apenas para testes de avanço de dia
 };
 
-//funções externas────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Funções internas
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Converte qualquer valor em texto e salva no armazenamento local.
 async function salvar(chave, valor) {
   try {
     await AsyncStorage.setItem(chave, JSON.stringify(valor));
   } catch (error) {
-    console.error(`[storageService] Erro ao salvar "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao salvar "${chave}":`, error);
     throw error;
   }
 }
 
-// Lê o valor salvo e converte de volta para o tipo original.
-// Se não existir nada, retorna o "valorPadrao" informado.
 async function carregar(chave, valorPadrao = null) {
   try {
     const texto = await AsyncStorage.getItem(chave);
-    if (texto != null) {
-      return JSON.parse(texto);
-    }
+    if (texto != null) return JSON.parse(texto);
     return valorPadrao;
   } catch (error) {
-    console.error(`[storageService] Erro ao carregar "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao carregar "${chave}":`, error);
     throw error;
   }
 }
 
-// Apaga o valor de uma chave específica do armazenamento local.
 async function apagar(chave) {
   try {
     await AsyncStorage.removeItem(chave);
   } catch (error) {
-    console.error(`[storageService] Erro ao remover "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao remover "${chave}":`, error);
     throw error;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Progresso geral do usuário
-// Guarda informações como nível atual, pontos acumulados, etc.
-// Exemplo de objeto esperado: { nivel: 2, pontos: 150 }
+// Data — respeita simulação de dia para testes
+// getHoje() é a única fonte de "hoje" em todo o arquivo.
+// Quando há uma data simulada salva, ela é usada no lugar de new Date().
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um objeto com o progresso atual e salva.
+export async function getHoje() {
+  const simulada = await carregar(CHAVES.dataSimulada, null);
+  const data = simulada ? new Date(simulada) : new Date();
+  data.setHours(0, 0, 0, 0);
+  return data;
+}
+
+export function getChaveDoDia(data) {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ferramenta de teste — avança um dia no AsyncStorage
+// Faz tudo atomicamente: avança a data, zera atividades do dia,
+// e recalcula o streak corretamente.
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+export async function avancarDiaParaTeste() {
+  try {
+    // pega a data atual simulada (ou real) e avança 1 dia
+    const hoje = await getHoje();
+    const amanha = new Date(hoje);
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(0, 0, 0, 0);
+
+    // salva a nova data simulada
+    await salvar(CHAVES.dataSimulada, amanha.toISOString());
+
+    // zera as atividades concluídas — usa a chave do novo dia (que está vazio)
+    // o reset acontece naturalmente porque a chave salva será de ontem
+    // não precisamos apagar nada — carregarAtividadesConcluidas vai comparar
+    // a data salva com amanha e vai zerar sozinho
+
+    console.log(`[DEV] Dia avançado para: ${getChaveDoDia(amanha)}`);
+    return { sucesso: true, novaData: amanha.toISOString() };
+  } catch (error) {
+    console.error("[DEV] Erro ao avançar dia:", error);
+    return { sucesso: false };
+  }
+}
+
+export async function resetarDataSimulada() {
+  await apagar(CHAVES.dataSimulada);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progresso
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function salvarNovoProgresso(progresso) {
   await salvar(CHAVES.progresso, progresso);
 }
 
-// Retorna o objeto de progresso salvo.
-// Se ainda não foi salvo nada, retorna null.
 export async function carregarProgresso() {
   return carregar(CHAVES.progresso, null);
 }
 
-// Apaga o progresso salvo.
 export async function apagarProgresso() {
   await apagar(CHAVES.progresso);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Objetivos concluídos hoje
-// Guarda a lista de objetivos que o usuário marcou como feitos no dia.
-// Exemplo de array esperado: ["andar", "nao usar ar-condicionado", "sei la"]
+// Objetivos
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function substituirObjetivos(objetivos) {
   await salvar(CHAVES.objetivos, objetivos);
 }
 
-// Retorna o array de objetivos salvos.
-// Se não houver nenhum salvo ainda, retorna uma lista vazia [].
 export async function carregarObjetivosAtuais() {
   return carregar(CHAVES.objetivos, []);
 }
 
-// Apaga os objetivos do dia salvos.
 export async function removerObjetivosAtuais() {
   await apagar(CHAVES.objetivos);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Histórico do usuário
-// Guarda um registro de atividades passadas para exibir no app.
-// Exemplo de array esperado: [{ data: "2025-06-01", pontos: 80 }, ...]
+// Histórico
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um array com todo o histórico e salva no celular.
 export async function salvarHistorico(historico) {
   await salvar(CHAVES.historico, historico);
 }
 
-// Retorna o array com o histórico completo.
-// Se não houver nada salvo ainda, retorna uma lista vazia [].
 export async function carregarHistorico() {
   return carregar(CHAVES.historico, []);
 }
 
-// Apaga o histórico salvo.
 export async function removerHistorico() {
   await apagar(CHAVES.historico);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pontuação total
-// Guarda um número simples (int) representando a pontuação acumulada do usuário.
+// Pontuação
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um número e salva como pontuação total.
 export async function salvarPontuacao(pontuacao) {
   await salvar(CHAVES.pontuacao, pontuacao);
 }
 
-// Retorna a pontuação total salva.
-// Se ainda não existir nenhuma, retorna 0.
 export async function carregarPontuacao() {
   return carregar(CHAVES.pontuacao, 0);
 }
 
-// Apaga a pontuação salva.
 export async function removerPontuacao() {
   await apagar(CHAVES.pontuacao);
 }
 
-// reset completo (nao pode ser desfeito, cuidado ao usar)
-export async function limparDadosDoUsuario() {
-  try {
-    await AsyncStorage.multiRemove(Object.values(CHAVES));
-  } catch (error) {
-    console.error("[storageService] Erro ao limpar dados do usuário:", error);
-    throw error;
-  }
-}
-
-// lógica de Histórico e Impacto
+// ─────────────────────────────────────────────────────────────────────────────
+// Histórico + pontuação + streak — registro de ação
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtividade = null) {
   try {
@@ -967,57 +990,91 @@ export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtivida
 
     const novoRegistro = {
       id: Date.now().toString(),
-      idAtividade,           // ← campo novo, necessário para conquistas por id
+      idAtividade,
       acao: acaoNome,
       pontos: pontosGanhos,
       data: new Date().toISOString(),
     };
 
-    const novoHistorico = [novoRegistro, ...historicoAtual];
-    await salvar(CHAVES.historico, novoHistorico);
+    await salvar(CHAVES.historico, [novoRegistro, ...historicoAtual]);
 
     const pontuacaoAntiga = await carregarPontuacao();
     await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
 
-    await atualizarStreak();
+    // streak NÃO é atualizado aqui — só muda quando o dia vira
 
     return true;
   } catch (error) {
-    console.error("Erro ao registrar ação:", error);
+    console.error('Erro ao registrar ação:', error);
     return false;
   }
 }
 
-// lógica do streak
-export async function verificarViradaDeDia() {
-  const hoje = new Date().toDateString();
-  const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+// ─────────────────────────────────────────────────────────────────────────────
+// Streak — usa getHoje() para respeitar data simulada
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (dadosStreak.ultimaData !== hoje) {
-    // Se a data mudou, verificamos se foi ontem (para manter streak) ou antes (para resetar)
-    const ultimaData = new Date(dadosStreak.ultimaData);
-    const ontem = new Date();
-    ontem.setDate(ontem.getDate() - 1);
+// Chamada APENAS quando o dia vira (real ou simulado).
+// Recebe a data do dia que ACABOU de passar (ontem) e se houve atividade nele.
+// Retorna o novo objeto de streak.
+export async function processarStreakDaVirada(dataOntem, teveAtividade) {
+  try {
+    const dadosStreak = await carregar(CHAVES.streak, {
+      contagem: 0,
+      ultimaData: null,
+    });
 
-    let novaContagem = (dadosStreak.ultimaData && ultimaData.toDateString() === ontem.toDateString()) 
-      ? dadosStreak.contagem + 1 
-      : 1;
+    let novaContagem;
 
-    // Resetamos as atividades (o "objetivos" que você usa no HomeScreen)
-    await apagar(CHAVES.objetivos);
-    
-    // Salvamos a nova data e streak
-    await salvar(CHAVES.streak, { contagem: novaContagem, ultimaData: hoje });
-    return true; // Indica que houve virada
+    if (!teveAtividade) {
+      // não fez nada ontem — streak vai para 0
+      novaContagem = 0;
+    } else if (!dadosStreak.ultimaData) {
+      // primeira vez que registra algo — começa em 1
+      novaContagem = 1;
+    } else {
+      // verifica se ontem é exatamente o dia seguinte ao último streak
+      const ultimaData = new Date(dadosStreak.ultimaData);
+      ultimaData.setHours(0, 0, 0, 0);
+      const ontem = new Date(dataOntem);
+      ontem.setHours(0, 0, 0, 0);
+      const diferencaDias = Math.round(
+        (ontem.getTime() - ultimaData.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (diferencaDias === 1) {
+        // dia seguinte consecutivo — incrementa
+        novaContagem = dadosStreak.contagem + 1;
+      } else if (diferencaDias === 0) {
+        // mesmo dia (não deveria acontecer, mas protege)
+        novaContagem = dadosStreak.contagem;
+      } else {
+        // pulou dias — reseta para 1 (teve atividade ontem, só não foi consecutivo)
+        novaContagem = 1;
+      }
+    }
+
+    const novoStreak = {
+      contagem: novaContagem,
+      ultimaData: dataOntem, // data do dia que acabou de contar
+    };
+
+    await salvar(CHAVES.streak, novoStreak);
+    return novoStreak;
+  } catch (error) {
+    console.error('Erro ao processar streak da virada:', error);
+    return { contagem: 0, ultimaData: null };
   }
-  return false;
 }
 
 export async function carregarStreak() {
   return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
 }
 
-// sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
+// ─────────────────────────────────────────────────────────────────────────────
+// Conquistas
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { conquistas } from "../data/conquistas";
 
 export async function carregarConquistasGanhas() {
@@ -1031,14 +1088,15 @@ export async function checarNovasConquistas() {
 
   let novasConquistasNestaSessao = [];
 
-  // monta um Set com todos os ids de atividades já feitas (para lookup rápido)
-  const idsFeitos = new Set(historico.map(item => item.idAtividade).filter(Boolean));
+  const idsFeitos = new Set(
+    historico.map((item) => item.idAtividade).filter(Boolean)
+  );
 
-  // monta um contador de quantas vezes cada atividade foi feita
   const contagemPorId = {};
-  historico.forEach(item => {
+  historico.forEach((item) => {
     if (item.idAtividade) {
-      contagemPorId[item.idAtividade] = (contagemPorId[item.idAtividade] || 0) + 1;
+      contagemPorId[item.idAtividade] =
+        (contagemPorId[item.idAtividade] || 0) + 1;
     }
   });
 
@@ -1049,16 +1107,11 @@ export async function checarNovasConquistas() {
 
     if (c.tipo === "total_acoes") {
       alcancou = historico.length >= c.objetivo;
-
     } else if (c.tipo === "max_streak") {
       alcancou = streak.contagem >= c.objetivo;
-
     } else if (c.tipo === "acoes_ids") {
-      // verifica se todos os ids necessários já foram feitos pelo menos uma vez
-      alcancou = c.idsNecessarios.every(id => idsFeitos.has(id));
-
+      alcancou = c.idsNecessarios.every((id) => idsFeitos.has(id));
     } else if (c.tipo === "contagem_acao") {
-      // verifica se uma atividade específica foi feita X vezes
       alcancou = (contagemPorId[c.idAlvo] || 0) >= c.objetivo;
     }
 
@@ -1075,40 +1128,42 @@ export async function checarNovasConquistas() {
   return novasConquistasNestaSessao;
 }
 
+export async function checarConquista(conquista) {
+  const conquistasAtuais = await carregarConquistasGanhas();
+  return conquistasAtuais.ganhas.includes(conquista.id);
+}
+
+export async function limparConquistas() {
+  await apagar(CHAVES.conquistas);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventário e loja
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function carregarInventario() {
   return carregar(CHAVES.inventario, []);
 }
 
 export async function checarItemNoInventario(item) {
   const inventarioAtual = await carregarInventario();
-  const itemParaEncontrar = inventarioAtual.find((i) => i.id === item.id);
-
-  if (itemParaEncontrar) {
-    return true;
-  }
-  return false;
+  return inventarioAtual.some((i) => i.id === item.id);
 }
 
-// logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
 export async function comprarItem(item) {
   try {
     const pontosAtuais = await carregarPontuacao();
 
-    // verifica se tem dinheiro
     if (pontosAtuais < item.preco) {
       return { sucesso: false, erro: "Pontos insuficientes!" };
     }
 
-    // verifica se o item ja foi comprado
     const itemJaExiste = await checarItemNoInventario(item);
     if (itemJaExiste) {
       return { sucesso: false, erro: "Você já possui este item!" };
     }
 
-    // carrega o inventário
     const inventarioAtual = await carregarInventario();
-
-    //adiciona o item
     const novoInventario = [...inventarioAtual, item];
 
     await salvarPontuacao(pontosAtuais - item.preco);
@@ -1121,43 +1176,113 @@ export async function comprarItem(item) {
   }
 }
 
+// Chamada pela HomeScreen ao abrir. Verifica se o dia real virou
+// desde a última vez que o app foi aberto.
+export async function verificarViradaDeDia() {
+  try {
+    const CHAVE_ATIVIDADES = 'rat:atividadesConcluidasHoje';
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const chaveHoje = hoje.toISOString().slice(0, 10); // "2026-06-09"
+
+    const statusAtividades = await carregar(CHAVE_ATIVIDADES, {
+      data: null,
+      ids: [],
+    });
+
+    // Se a data salva já é hoje, o dia não virou — não faz nada
+    if (statusAtividades.data === chaveHoje) return false;
+
+    // O dia virou. A data salva é "ontem" (ou mais antigo).
+    // Verifica se o usuário fez alguma atividade naquele dia.
+    const teveAtividade =
+      Array.isArray(statusAtividades.ids) && statusAtividades.ids.length > 0;
+
+    const dataOntem = statusAtividades.data; // pode ser null se for o primeiro uso
+
+    // Processa o streak com base no que aconteceu ontem
+    if (dataOntem !== null) {
+      await processarStreakDaVirada(dataOntem, teveAtividade);
+    }
+
+    // Abre o novo dia com lista vazia
+    await salvar(CHAVE_ATIVIDADES, { data: chaveHoje, ids: [] });
+
+    return true; // houve virada
+  } catch (error) {
+    console.error('[Armazenamento] Erro em verificarViradaDeDia:', error);
+    return false;
+  }
+}
+
+export async function simularViradaDia() {
+  try {
+    const CHAVE_ATIVIDADES = 'rat:atividadesConcluidasHoje';
+
+    const statusAtividades = await carregar(CHAVE_ATIVIDADES, {
+      data: null,
+      ids: [],
+    });
+
+    // A data "de hoje" para a simulação é o que está salvo em atividadesConcluidasHoje,
+    // ou a data real se nunca foi salvo nada.
+    const diaQueEstaSendoEncerrado =
+      statusAtividades.data ?? new Date().toISOString().slice(0, 10);
+
+    const teveAtividade =
+      Array.isArray(statusAtividades.ids) && statusAtividades.ids.length > 0;
+
+    const streakAnterior = (await carregarStreak()).contagem;
+
+    // Processa o streak do dia que está sendo encerrado
+    const novoStreak = await processarStreakDaVirada(
+      diaQueEstaSendoEncerrado,
+      teveAtividade,
+    );
+
+    // Calcula o "amanhã" como próximo dia da simulação
+    const base = new Date(diaQueEstaSendoEncerrado);
+    base.setDate(base.getDate() + 1);
+    base.setHours(0, 0, 0, 0);
+    const proximoDia = base.toISOString().slice(0, 10);
+
+    // Abre o novo dia simulado com lista vazia
+    await salvar(CHAVE_ATIVIDADES, { data: proximoDia, ids: [] });
+
+    return {
+      sucesso: true,
+      diaEncerrado: diaQueEstaSendoEncerrado,
+      proximoDia,
+      teveAtividade,
+      streakAnterior,
+      streakAtual: novoStreak.contagem,
+    };
+  } catch (error) {
+    console.error('[dev] Erro ao simular virada de dia:', error);
+    return { sucesso: false, erro: String(error) };
+  }
+}
+
 export async function salvarItemNoInventario(item) {
   const inventarioAtual = await carregarInventario();
-  const inventarioNovo = [...inventarioAtual, item];
-  await salvar(CHAVES.inventario, inventarioNovo);
+  await salvar(CHAVES.inventario, [...inventarioAtual, item]);
 }
 
 export async function removerItemDoInventario(item) {
-  // checagem para ver se o item sequer está no inventário
   const itemNoInventario = await checarItemNoInventario(item);
-  // se estiver continua, se não estiver para a função
   if (!itemNoInventario) {
     return { sucesso: false, erro: "Item não encontrado no inventário." };
   }
-
   const inventarioAtual = await carregarInventario();
-  //cria um novo inventario
-  const inventarioNovo = [];
-
-  // para todo item dentro do inventario se for diferente do item a ser removido é adicionado no novo inventario
-  for (let i = 0; i < inventarioAtual.length; i++) {
-    if (inventarioAtual[i].id !== item.id) {
-      inventarioNovo.push(inventarioAtual[i]);
-    }
-  }
-  // substitui inventario antigo pelo novo
+  const inventarioNovo = inventarioAtual.filter((i) => i.id !== item.id);
   await salvar(CHAVES.inventario, inventarioNovo);
-
-  return { sucesso: true, erro: false };
+  return { sucesso: true };
 }
 
 export async function buscarItemPorId(idDoItem) {
   const inventarioAtual = await carregarInventario();
-  const itemExiste = inventarioAtual.find((i) => i.id === idDoItem);
-  if (itemExiste) {
-    return itemExiste;
-  }
-  return null;
+  return inventarioAtual.find((i) => i.id === idDoItem) || null;
 }
 
 export async function limparInventario() {
@@ -1169,94 +1294,15 @@ export async function tamanhoDoInventario() {
   return inventarioAtual.length;
 }
 
-export async function checarConquista(conquista) {
-  const conquistasAtuais = await carregarConquistasGanhas();
+// ─────────────────────────────────────────────────────────────────────────────
+// Reset completo
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (conquistasAtuais.ganhas.includes(conquista.id)) {
-    return true;
-  }
-
-  return false;
-}
-
-export async function limparConquistas() {
-  await apagar(CHAVES.conquistas);
-}
-
-// ─── DEV TOOLS (não usar em produção) ────────────────────────────────────────
-
-export async function resetarTudo() {
+export async function limparDadosDoUsuario() {
   try {
-    await AsyncStorage.clear();
+    await AsyncStorage.multiRemove(Object.values(CHAVES));
   } catch (error) {
-    console.error('[dev] Erro ao resetar tudo:', error);
-    throw error;
-  }
-}
-
-export async function simularViradaDia() {
-  try {
-    const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
-    const objetivosHoje = await carregarObjetivosAtuais();
-
-    const streakAnterior = dadosStreak.contagem;
-    const teveAtividade = objetivosHoje.length > 0;
-
-    // Calcula nova data (ontem + 1 dia a partir da ultimaData, ou amanhã a partir de hoje)
-    const baseData = dadosStreak.ultimaData
-      ? new Date(dadosStreak.ultimaData)
-      : new Date();
-    baseData.setDate(baseData.getDate() + 1);
-    baseData.setHours(0, 0, 0, 0);
-
-    // Streak: incrementa se teve atividade hoje, zera se não teve
-    const streakAtual = teveAtividade ? streakAnterior + 1 : 0;
-
-    await salvar(CHAVES.streak, {
-      contagem: streakAtual,
-      ultimaData: baseData.toISOString(),
-    });
-
-    // Reseta as atividades do dia
-    await removerObjetivosAtuais();
-
-    return {
-      streakAnterior,
-      streakAtual,
-      atividadesResetadas: objetivosHoje.length,
-      dataSimulada: baseData.toLocaleDateString('pt-BR'),
-    };
-  } catch (error) {
-    console.error('[dev] Erro ao simular virada de dia:', error);
-    throw error;
-  }
-}
-
-export async function adicionarPontosDebug(quantidade) {
-  try {
-    const atual = await carregarPontuacao();
-    await salvarPontuacao(atual + quantidade);
-  } catch (error) {
-    console.error('[dev] Erro ao adicionar pontos:', error);
-    throw error;
-  }
-}
-
-export async function exportarEstadoCompleto() {
-  try {
-    const todasChaves = await AsyncStorage.getAllKeys();
-    const pares = await AsyncStorage.multiGet(todasChaves);
-    const estado = {};
-    for (const [chave, valor] of pares) {
-      try {
-        estado[chave] = JSON.parse(valor);
-      } catch {
-        estado[chave] = valor;
-      }
-    }
-    return estado;
-  } catch (error) {
-    console.error('[dev] Erro ao exportar estado:', error);
+    console.error("[Armazenamento] Erro ao limpar dados do usuário:", error);
     throw error;
   }
 }
@@ -1267,42 +1313,52 @@ ARQUIVO: src/services/LogicaApp.js
 // src/services/LogicaApp.js
 
 // aqui fica a lógica de negócio do app, o que acontece quando o usuário completa uma atividade
-
 import {
   adicionarAcaoAoHistorico,
   checarNovasConquistas,
-  atualizarStreak, // Importamos esta função que já existe
-} from "./Armazenamento";
+  carregarStreak,
+} from './Armazenamento';
 
 import {
   checarAtividadeJaFoiConcluidaHoje,
   marcarAtividadeComoConcluida,
-} from "./atividades";
+} from './atividades';
 
 export async function registrarAtividadeCompleta(atividade) {
   try {
     const jaFoiConcluidaHoje = await checarAtividadeJaFoiConcluidaHoje(atividade.id);
 
     if (jaFoiConcluidaHoje) {
-      return { sucesso: false, erro: "Essa atividade já foi concluída hoje." };
+      return {
+        sucesso: false,
+        erro: 'Essa atividade já foi concluída hoje.',
+      };
     }
 
-    // 1. Marca atividade
     await marcarAtividadeComoConcluida(atividade.id);
-    
-    // 2. Adiciona ao histórico e soma pontos (isso já chama atualizarStreak internamente no seu código atual)
-    await adicionarAcaoAoHistorico(atividade.titulo, Number(atividade.pontos) || 0, atividade.id);
 
-    // 3. Checa conquistas
+    await adicionarAcaoAoHistorico(
+      atividade.titulo,
+      Number(atividade.pontos) || 0,
+      atividade.id,
+    );
+
+    // streak não é tocado aqui — só muda na virada de dia
+
+    const streakInfo = await carregarStreak();
     const conquistasDesbloqueadas = await checarNovasConquistas();
 
     return {
       sucesso: true,
+      novoStreak: streakInfo.contagem,
       novosTrofeus: conquistasDesbloqueadas,
     };
   } catch (error) {
-    console.error("Erro ao concluir atividade:", error);
-    return { sucesso: false, erro: "Não foi possível concluir a atividade." };
+    console.error('Erro ao concluir atividade:', error);
+    return {
+      sucesso: false,
+      erro: 'Não foi possível concluir a atividade.',
+    };
   }
 }
 
@@ -1327,20 +1383,13 @@ ARQUIVO: src/services/atividades.js
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { categorias } from "../data/categorias";
 import { atividades } from "../data/atividades";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Chaves de armazenamento
-// ─────────────────────────────────────────────────────────────────────────────
+import { getHoje, getChaveDoDia } from "./Armazenamento";
 
 const C = {
   atividadesPersonalizadas: "rat:atividadesPersonalizadas",
   atividadesFavoritas: "rat:atividadesFavoritas",
   atividadesConcluidasHoje: "rat:atividadesConcluidasHoje",
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Funções internas de apoio (não exportadas)
-// ─────────────────────────────────────────────────────────────────────────────
 
 async function salvar(chave, valor) {
   try {
@@ -1354,11 +1403,7 @@ async function salvar(chave, valor) {
 async function carregar(chave, valorPadrao = null) {
   try {
     const texto = await AsyncStorage.getItem(chave);
-
-    if (texto != null) {
-      return JSON.parse(texto);
-    }
-
+    if (texto != null) return JSON.parse(texto);
     return valorPadrao;
   } catch (error) {
     console.error(`[atividadesService] Erro ao carregar "${chave}":`, error);
@@ -1375,161 +1420,113 @@ async function remover(chave) {
   }
 }
 
-function getChaveDoDia() {
-  const hoje = new Date();
-
-  const ano = hoje.getFullYear();
-  const mes = String(hoje.getMonth() + 1).padStart(2, "0");
-  const dia = String(hoje.getDate()).padStart(2, "0");
-
-  return `${ano}-${mes}-${dia}`;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Categorias e atividades base
-// Esses dados vêm dos arquivos da pasta /data
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Retorna a lista de categorias cadastradas no app.
 export function carregarCategorias() {
   return categorias;
 }
 
-// Retorna a lista de atividades padrão do app.
 export function carregarAtividadesBase() {
   return atividades;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Atividades personalizadas
-// São atividades criadas pelo próprio usuário
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Retorna a lista de atividades personalizadas.
-// Se não houver nenhuma salva ainda, retorna [].
 export async function carregarAtividadesPersonalizadas() {
   return carregar(C.atividadesPersonalizadas, []);
 }
 
-// Adiciona uma nova atividade personalizada à lista já salva.
 export async function adicionarAtividadePersonalizada(novaAtividade) {
-  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
-  const novaLista = [...atividadesPersonalizadas, novaAtividade];
-
+  const lista = await carregarAtividadesPersonalizadas();
+  const novaLista = [...lista, novaAtividade];
   await salvar(C.atividadesPersonalizadas, novaLista);
-
   return novaAtividade;
 }
 
-// Remove uma atividade personalizada pelo id.
 export async function removerAtividadePersonalizada(idDaAtividade) {
-  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
-
-  const novaLista = atividadesPersonalizadas.filter((atividade) => {
-    return atividade.id !== idDaAtividade;
-  });
-
-  await salvar(C.atividadesPersonalizadas, novaLista);
+  const lista = await carregarAtividadesPersonalizadas();
+  await salvar(
+    C.atividadesPersonalizadas,
+    lista.filter((a) => a.id !== idDaAtividade)
+  );
 }
 
-// Apaga todas as atividades personalizadas salvas.
 export async function removerAtividadesPersonalizadas() {
   await remover(C.atividadesPersonalizadas);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Lista completa de atividades
-// Junta as atividades padrão com as personalizadas
+// Lista completa
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Retorna todas as atividades do app.
 export async function carregarTodasAsAtividades() {
-  const atividadesPersonalizadas = await carregarAtividadesPersonalizadas();
-  return [...atividades, ...atividadesPersonalizadas];
+  const personalizadas = await carregarAtividadesPersonalizadas();
+  return [...atividades, ...personalizadas];
 }
 
-// Busca uma atividade pelo id.
-// Se não encontrar, retorna null.
 export async function buscarAtividadePorId(idDaAtividade) {
-  const todasAsAtividades = await carregarTodasAsAtividades();
-
-  const atividadeEncontrada = todasAsAtividades.find((item) => {
-    return item.id === idDaAtividade;
-  });
-
-  return atividadeEncontrada || null;
+  const todas = await carregarTodasAsAtividades();
+  return todas.find((a) => a.id === idDaAtividade) || null;
 }
 
-// Retorna apenas as atividades de uma categoria específica.
 export async function filtrarAtividadesPorCategoria(idDaCategoria) {
-  const todasAsAtividades = await carregarTodasAsAtividades();
-
-  return todasAsAtividades.filter((atividade) => {
-    return atividade.categoria === idDaCategoria;
-  });
+  const todas = await carregarTodasAsAtividades();
+  return todas.filter((a) => a.categoria === idDaCategoria);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Favoritas
-// Guarda apenas os ids das atividades marcadas como favoritas
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Retorna a lista de ids favoritos.
-// Se não houver nada salvo, retorna [].
 export async function carregarFavoritas() {
   return carregar(C.atividadesFavoritas, []);
 }
 
-// Marca uma atividade como favorita.
 export async function favoritarAtividade(idDaAtividade) {
   const favoritas = await carregarFavoritas();
-
-  if (favoritas.includes(idDaAtividade)) {
-    return favoritas;
-  }
-
+  if (favoritas.includes(idDaAtividade)) return favoritas;
   const novaLista = [...favoritas, idDaAtividade];
   await salvar(C.atividadesFavoritas, novaLista);
-
   return novaLista;
 }
 
-// Remove uma atividade da lista de favoritas.
 export async function desfavoritarAtividade(idDaAtividade) {
   const favoritas = await carregarFavoritas();
-
-  const novaLista = favoritas.filter((id) => {
-    return id !== idDaAtividade;
-  });
-
+  const novaLista = favoritas.filter((id) => id !== idDaAtividade);
   await salvar(C.atividadesFavoritas, novaLista);
-
   return novaLista;
 }
 
-// Apaga toda a lista de favoritas.
 export async function removerFavoritas() {
   await remover(C.atividadesFavoritas);
 }
 
-// Carrega as atividades concluídas de hoje e zera a lista automaticamente se o dia mudou.
-// { data: "2026-04-11", ids: ["atividade-1", "atividade-2"] }
+// ─────────────────────────────────────────────────────────────────────────────
+// Atividades concluídas hoje
+// Usa getHoje() para respeitar a data simulada nos testes de avanço de dia.
+// O objeto salvo tem formato: { data: "2026-06-09", ids: ["id1", "id2"] }
+// Quando a data salva é diferente da data atual (ou simulada),
+// a lista é zerada automaticamente — é aqui que o reset do dia acontece.
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function carregarAtividadesConcluidas() {
-  const hoje = getChaveDoDia();
+  const hoje = await getHoje();
+  const chaveHoje = getChaveDoDia(hoje);
 
   const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
-    data: hoje,
+    data: chaveHoje,
     ids: [],
   });
 
-  if (statusSalvo.data !== hoje) {
-    const novoStatus = {
-      data: hoje,
-      ids: [],
-    };
-
+  // se a data salva é diferente da data atual (ou simulada), zera
+  if (statusSalvo.data !== chaveHoje) {
+    const novoStatus = { data: chaveHoje, ids: [] };
     await salvar(C.atividadesConcluidasHoje, novoStatus);
-    return novoStatus.ids;
+    return [];
   }
 
   return statusSalvo.ids;
@@ -1540,68 +1537,53 @@ export async function checarAtividadeJaFoiConcluidaHoje(idDaAtividade) {
   return concluidasHoje.includes(idDaAtividade);
 }
 
-// Marca uma atividade como concluída no dia atual.
 export async function marcarAtividadeComoConcluida(idDaAtividade) {
-  const hoje = getChaveDoDia();
+  const hoje = await getHoje();
+  const chaveHoje = getChaveDoDia(hoje);
 
   const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
-    data: hoje,
+    data: chaveHoje,
     ids: [],
   });
 
-  let statusAtual = statusSalvo;
-
-  if (statusSalvo.data !== hoje) {
-    statusAtual = {
-      data: hoje,
-      ids: [],
-    };
-  }
+  // reseta se a data mudou
+  const statusAtual =
+    statusSalvo.data !== chaveHoje
+      ? { data: chaveHoje, ids: [] }
+      : statusSalvo;
 
   if (statusAtual.ids.includes(idDaAtividade)) {
     return statusAtual.ids;
   }
 
   statusAtual.ids.push(idDaAtividade);
-
   await salvar(C.atividadesConcluidasHoje, statusAtual);
-
   return statusAtual.ids;
 }
 
-// Remove uma atividade da lista de concluídas do dia atual.
 export async function desmarcarAtividadeConcluida(idDaAtividade) {
-  const hoje = getChaveDoDia();
+  const hoje = await getHoje();
+  const chaveHoje = getChaveDoDia(hoje);
 
   const statusSalvo = await carregar(C.atividadesConcluidasHoje, {
-    data: hoje,
+    data: chaveHoje,
     ids: [],
   });
 
-  let statusAtual = statusSalvo;
+  const statusAtual =
+    statusSalvo.data !== chaveHoje
+      ? { data: chaveHoje, ids: [] }
+      : statusSalvo;
 
-  if (statusSalvo.data !== hoje) {
-    statusAtual = {
-      data: hoje,
-      ids: [],
-    };
-  }
-
-  statusAtual.ids = statusAtual.ids.filter((id) => {
-    return id !== idDaAtividade;
-  });
-
+  statusAtual.ids = statusAtual.ids.filter((id) => id !== idDaAtividade);
   await salvar(C.atividadesConcluidasHoje, statusAtual);
-
   return statusAtual.ids;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Limpeza geral
-// Remove todos os dados relacionados às atividades
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Apaga atividades personalizadas, favoritas e o controle de concluídas do dia.
 export async function limparDadosDeAtividades() {
   try {
     await AsyncStorage.multiRemove([
@@ -1610,14 +1592,10 @@ export async function limparDadosDeAtividades() {
       C.atividadesConcluidasHoje,
     ]);
   } catch (error) {
-    console.error(
-      "[atividadesService] Erro ao limpar dados de atividades:",
-      error,
-    );
+    console.error("[atividadesService] Erro ao limpar dados de atividades:", error);
     throw error;
   }
 }
-
 
 ----------------------------------------------------------------------
 ARQUIVO: src/services/estatisticas.js
@@ -1901,15 +1879,24 @@ const styles = StyleSheet.create({
 ----------------------------------------------------------------------
 ARQUIVO: src/screens/HomeScreen.js
 ----------------------------------------------------------------------
+// src/screens/HomeScreen.js
+
 import React, { useState, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
+import {
+  View, Text, ScrollView, TouchableOpacity,
+  StyleSheet, RefreshControl,
+} from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+
 import { verificarViradaDeDia } from '../services/Armazenamento';
 import { atividades } from '../data/atividades';
 import { getMissaoDoDia } from '../services/missao_service';
 import { registrarAtividadeCompleta } from '../services/LogicaApp';
 import { carregarAtividadesConcluidas } from '../services/atividades';
 import { useUser } from '../context/UserContext';
+
+const atividadesPositivas = atividades.filter(a => a.pontos >= 0);
+const atividadesNegativas = atividades.filter(a => a.pontos < 0);
 
 export default function HomeScreen() {
   const { atualizarDadosGlobais } = useUser();
@@ -1918,27 +1905,19 @@ export default function HomeScreen() {
   const [carregando, setCarregando] = useState(false);
   const [feedbackId, setFeedbackId] = useState(null);
 
-  const carregar = useCallback(async () => {
-    const ids = await carregarAtividadesConcluidas();
-    setConcluidasHoje(ids || []);
-  }, []);
-
+  // Roda toda vez que a tela recebe foco (ao navegar de volta, ao abrir o app).
+  // É aqui que a virada de dia real é detectada.
   useFocusEffect(
-  useCallback(() => {
-    async function checarECarregar() {
-      // 1. O app verifica se o dia virou no armazenamento
-      const houveVirada = await verificarViradaDeDia();
-      
-      // 2. Se virou ou não, recarregamos as atividades
-      const ids = await carregarAtividadesConcluidas();
-      setConcluidasHoje(ids || []);
-      
-      // 3. Atualiza o contexto (pontos/streak) para o header refletir a mudança
-      await atualizarDadosGlobais();
-    }
-    checarECarregar();
-  }, [atualizarDadosGlobais])
-);
+    useCallback(() => {
+      async function checarECarregar() {
+        await verificarViradaDeDia();
+        const ids = await carregarAtividadesConcluidas();
+        setConcluidasHoje(ids || []);
+        await atualizarDadosGlobais();
+      }
+      checarECarregar();
+    }, [atualizarDadosGlobais])
+  );
 
   async function handleRegistrar(atividade) {
     if (concluidasHoje.includes(atividade.id) || carregando) return;
@@ -1955,9 +1934,22 @@ export default function HomeScreen() {
     setCarregando(false);
   }
 
+  // Totais do dia — só atividades positivas contam para a barra de progresso
   const totalHoje = atividades
     .filter(a => concluidasHoje.includes(a.id))
     .reduce((acc, a) => acc + a.pontos, 0);
+
+  const totalCarbono = atividades
+    .filter(a => concluidasHoje.includes(a.id) && a.carbonoKg && a.carbonoKg > 0)
+    .reduce((acc, a) => acc + a.carbonoKg, 0);
+
+  const positivasFeitas = concluidasHoje.filter(id =>
+    atividadesPositivas.some(a => a.id === id)
+  ).length;
+
+  const porcentagemProgresso = atividadesPositivas.length > 0
+    ? (positivasFeitas / atividadesPositivas.length) * 100
+    : 0;
 
   return (
     <ScrollView
@@ -1967,45 +1959,127 @@ export default function HomeScreen() {
         <RefreshControl refreshing={carregando} colors={['#515a47']} />
       }
     >
+
+      {/* Missão do dia */}
       <View style={styles.missaoCard}>
         <Text style={styles.missaoLabel}>🎯 Missão do dia</Text>
         <Text style={styles.missaoTitulo}>{missaoDoDia.titulo}</Text>
         <Text style={styles.missaoDescricao}>{missaoDoDia.descricao}</Text>
+        <View style={styles.missaoPontosRow}>
+          <Text style={styles.missaoPontos}>+{missaoDoDia.pontos} pts se completar</Text>
+        </View>
       </View>
 
+      {/* Progresso do dia */}
       <View style={styles.progressoRow}>
         <Text style={styles.progressoTexto}>
-          {concluidasHoje.length} de {atividades.length} atividades hoje
+          {positivasFeitas} de {atividadesPositivas.length} atividades hoje
         </Text>
-        <Text style={styles.progressoPontos}>+{totalHoje} pts</Text>
+        <View style={styles.progressoDireita}>
+          <Text style={styles.progressoPontos}>
+            {totalHoje >= 0 ? '+' : ''}{totalHoje} pts
+          </Text>
+          {totalCarbono > 0 && (
+            <Text style={styles.progressoCarbono}>
+              -{totalCarbono.toFixed(2)} kgCO₂e
+            </Text>
+          )}
+        </View>
       </View>
       <View style={styles.barraFundo}>
-        <View style={[styles.barraPreenchida, { width: `${atividades.length > 0 ? (concluidasHoje.length / atividades.length) * 100 : 0}%` }]} />
+        <View style={[styles.barraPreenchida, { width: `${porcentagemProgresso}%` }]} />
       </View>
 
+      {/* Atividades positivas */}
       <Text style={styles.secaoTitulo}>Atividades de hoje</Text>
 
-      {atividades.map(atividade => {
+      {atividadesPositivas.map(atividade => {
         const feita = concluidasHoje.includes(atividade.id);
         const feedback = feedbackId === atividade.id;
+
         return (
           <TouchableOpacity
             key={atividade.id}
-            style={[styles.cartao, feita && styles.cartaoFeito, feedback && styles.cartaoFeedback]}
+            style={[
+              styles.cartao,
+              feita && styles.cartaoFeito,
+              feedback && styles.cartaoFeedback,
+            ]}
             onPress={() => handleRegistrar(atividade)}
+            activeOpacity={feita ? 1 : 0.7}
           >
             <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
             <View style={styles.cartaoInfo}>
-              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>{atividade.titulo}</Text>
+              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
+                {atividade.titulo}
+              </Text>
+              {atividade.carbonoKg && atividade.carbonoKg > 0 && (
+                <Text style={styles.cartaoCarbono}>
+                  -{atividade.carbonoKg} kgCO₂e
+                </Text>
+              )}
             </View>
             <View style={styles.cartaoPontosArea}>
-              <Text style={feita ? styles.checkFeito : styles.cartaoPontos}>
-                {feedback ? `+${atividade.pontos}!` : feita ? '✓' : `+${atividade.pontos}`}
-              </Text>
+              {feedback ? (
+                <Text style={styles.feedbackTexto}>+{atividade.pontos}!</Text>
+              ) : feita ? (
+                <Text style={styles.checkFeito}>✓</Text>
+              ) : (
+                <Text style={styles.cartaoPontos}>+{atividade.pontos}</Text>
+              )}
             </View>
           </TouchableOpacity>
         );
       })}
+
+      {/* Atividades negativas */}
+      <Text style={[styles.secaoTitulo, styles.secaoNegativaTitulo]}>
+        Seja honesto — registre também o que não foi legal
+      </Text>
+      <Text style={styles.secaoSubtitulo}>
+        Registrar ações negativas ajuda você a entender sua pegada real.
+      </Text>
+
+      {atividadesNegativas.map(atividade => {
+        const feita = concluidasHoje.includes(atividade.id);
+        const feedback = feedbackId === atividade.id;
+
+        return (
+          <TouchableOpacity
+            key={atividade.id}
+            style={[
+              styles.cartao,
+              styles.cartaoNegativo,
+              feita && styles.cartaoNegativoFeito,
+            ]}
+            onPress={() => handleRegistrar(atividade)}
+            activeOpacity={feita ? 1 : 0.7}
+          >
+            <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
+            <View style={styles.cartaoInfo}>
+              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
+                {atividade.titulo}
+              </Text>
+              {atividade.carbonoKg && atividade.carbonoKg < 0 && (
+                <Text style={[styles.cartaoCarbono, styles.cartaoCarbonNegativo]}>
+                  +{Math.abs(atividade.carbonoKg)} kgCO₂e emitidos
+                </Text>
+              )}
+            </View>
+            <View style={styles.cartaoPontosArea}>
+              {feedback ? (
+                <Text style={styles.feedbackNegativoTexto}>{atividade.pontos}!</Text>
+              ) : feita ? (
+                <Text style={styles.checkFeito}>✓</Text>
+              ) : (
+                <Text style={styles.cartaoPontosNegativo}>{atividade.pontos}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+
+      <View style={{ height: 32 }} />
     </ScrollView>
   );
 }
@@ -2013,37 +2087,154 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: '#f1f7ed' },
   container: { padding: 20 },
-  missaoCard: { backgroundColor: '#515a47', borderRadius: 16, padding: 20, marginBottom: 20 },
-  missaoLabel: { color: '#e0eec6', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
-  missaoTitulo: { color: '#f1f7ed', fontSize: 20, fontWeight: 'bold' },
-  missaoDescricao: { color: '#c5d4b5', fontSize: 14 },
-  progressoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+
+  // Missão
+  missaoCard: {
+    backgroundColor: '#515a47',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+  },
+  missaoLabel: {
+    color: '#e0eec6',
+    fontSize: 12,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  missaoTitulo: {
+    color: '#f1f7ed',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 6,
+  },
+  missaoDescricao: {
+    color: '#c5d4b5',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  missaoPontosRow: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignSelf: 'flex-start',
+  },
+  missaoPontos: {
+    color: '#e0eec6',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+
+  // Progresso
+  progressoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
   progressoTexto: { fontSize: 13, color: '#666' },
+  progressoDireita: { alignItems: 'flex-end' },
   progressoPontos: { fontSize: 13, fontWeight: '700', color: '#7ca982' },
-  barraFundo: { height: 8, backgroundColor: '#e0eec6', borderRadius: 4, marginBottom: 24 },
-  barraPreenchida: { height: '100%', backgroundColor: '#7ca982', borderRadius: 4 },
-  secaoTitulo: { fontSize: 16, fontWeight: '700', color: '#515a47', marginBottom: 12 },
-  cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 2, borderColor: '#e0eec6' },
-  cartaoFeito: { backgroundColor: '#f1f7ed', borderColor: '#7ca982' },
-  cartaoFeedback: { borderColor: '#c2a83e', backgroundColor: '#fffbe6' },
+  progressoCarbono: { fontSize: 11, color: '#515a47', marginTop: 2 },
+  barraFundo: {
+    height: 8,
+    backgroundColor: '#e0eec6',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 24,
+  },
+  barraPreenchida: {
+    height: '100%',
+    backgroundColor: '#7ca982',
+    borderRadius: 4,
+  },
+
+  // Seções
+  secaoTitulo: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#515a47',
+    marginBottom: 12,
+  },
+  secaoNegativaTitulo: {
+    color: '#a05050',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  secaoSubtitulo: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 12,
+  },
+
+  // Cartão base
+  cartao: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 2,
+    borderColor: '#e0eec6',
+  },
+  cartaoFeito: {
+    backgroundColor: '#f1f7ed',
+    borderColor: '#7ca982',
+    opacity: 0.85,
+  },
+  cartaoFeedback: {
+    borderColor: '#c2a83e',
+    backgroundColor: '#fffbe6',
+  },
+  cartaoNegativo: {
+    borderColor: '#f5c6c6',
+    backgroundColor: '#fff8f8',
+  },
+  cartaoNegativoFeito: {
+    borderColor: '#d08080',
+    opacity: 0.85,
+  },
+
+  // Conteúdo do cartão
   cartaoIcone: { fontSize: 28, marginRight: 14 },
   cartaoInfo: { flex: 1 },
   cartaoTitulo: { fontSize: 15, fontWeight: '600', color: '#333' },
-  cartaoTituloFeito: { color: '#7ca982', textDecorationLine: 'line-through' },
+  cartaoTituloFeito: {
+    color: '#7ca982',
+    textDecorationLine: 'line-through',
+  },
+  cartaoCarbono: {
+    fontSize: 11,
+    color: '#7ca982',
+    marginTop: 3,
+  },
+  cartaoCarbonNegativo: {
+    color: '#c05050',
+  },
+
+  // Área de pontos
+  cartaoPontosArea: { minWidth: 44, alignItems: 'center' },
   cartaoPontos: { fontSize: 14, fontWeight: '700', color: '#c2a83e' },
-  checkFeito: { fontSize: 20, color: '#7ca982', fontWeight: 'bold' }
+  cartaoPontosNegativo: { fontSize: 14, fontWeight: '700', color: '#c05050' },
+  checkFeito: { fontSize: 20, color: '#7ca982', fontWeight: 'bold' },
+  feedbackTexto: { fontSize: 16, fontWeight: 'bold', color: '#c2a83e' },
+  feedbackNegativoTexto: { fontSize: 16, fontWeight: 'bold', color: '#c05050' },
 });
 
 ----------------------------------------------------------------------
 ARQUIVO: src/screens/ConquistasScreen.js
 ----------------------------------------------------------------------
+// src/screens/ConquistasScreen.js
+
 import React, { useState, useCallback } from 'react';
-import {
-  View, Text, ScrollView, StyleSheet,
-} from 'react-native';
+import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { conquistas } from '../data/conquistas';
+import { atividades as listaAtividades } from '../data/atividades';
 import {
   carregarConquistasGanhas,
   carregarHistorico,
@@ -2051,11 +2242,20 @@ import {
   carregarStreak,
 } from '../services/Armazenamento';
 
+// mapa de id -> carbonoKg para lookup rápido
+const carbonoPorId = {};
+listaAtividades.forEach((a) => {
+  if (a.carbonoKg && a.carbonoKg > 0) {
+    carbonoPorId[a.id] = a.carbonoKg;
+  }
+});
+
 export default function ConquistasScreen() {
   const [conquistasGanhas, setConquistasGanhas] = useState([]);
   const [historico, setHistorico] = useState([]);
   const [pontos, setPontos] = useState(0);
   const [streak, setStreak] = useState(0);
+  const [totalCarbono, setTotalCarbono] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -2065,22 +2265,31 @@ export default function ConquistasScreen() {
         const p = await carregarPontuacao();
         const s = await carregarStreak();
 
+        // calcula kgCO2e total economizado
+        // usa o idAtividade salvo no histórico para buscar carbonoKg
+        const carbono = h.reduce((acc, item) => {
+          if (item.idAtividade && carbonoPorId[item.idAtividade]) {
+            return acc + carbonoPorId[item.idAtividade];
+          }
+          return acc;
+        }, 0);
+
         setConquistasGanhas(cg.ganhas || []);
         setHistorico(h);
         setPontos(p);
         setStreak(s.contagem);
+        setTotalCarbono(carbono);
       }
       carregar();
     }, [])
   );
 
-  // agrupa o histórico por categoria para o mini relatório
-  const acoesPorCategoria = historico.reduce((acc, item) => {
+  const acoesPorNome = historico.reduce((acc, item) => {
     acc[item.acao] = (acc[item.acao] || 0) + 1;
     return acc;
   }, {});
 
-  const topAcoes = Object.entries(acoesPorCategoria)
+  const topAcoes = Object.entries(acoesPorNome)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3);
 
@@ -2108,6 +2317,19 @@ export default function ConquistasScreen() {
           </View>
         </View>
 
+        {/* Carbono economizado — destaque */}
+        {totalCarbono > 0 && (
+          <View style={styles.carbonoCard}>
+            <Text style={styles.carbonoNumero}>{totalCarbono.toFixed(2)}</Text>
+            <Text style={styles.carbonoUnidade}>kgCO₂e economizados</Text>
+            <Text style={styles.carbonoComparacao}>
+              {totalCarbono >= 1
+                ? `equivale a ${(totalCarbono / 0.187).toFixed(0)} km não percorridos de carro`
+                : `equivale a ${(totalCarbono * 1000).toFixed(0)} g de CO₂ evitados`}
+            </Text>
+          </View>
+        )}
+
         {topAcoes.length > 0 && (
           <View style={styles.topAcoes}>
             <Text style={styles.topTitulo}>Suas ações mais frequentes:</Text>
@@ -2133,7 +2355,7 @@ export default function ConquistasScreen() {
         Conquistas — {conquistasGanhas.length}/{conquistas.length}
       </Text>
 
-      {conquistas.map(conquista => {
+      {conquistas.map((conquista) => {
         const ganhou = conquistasGanhas.includes(conquista.id);
 
         return (
@@ -2152,11 +2374,16 @@ export default function ConquistasScreen() {
                 {conquista.descricao}
               </Text>
               {!ganhou && (
-                <View style={styles.progressoConquista}>
-                  <Text style={styles.progressoConquistaTexto}>
-                    Meta: {conquista.objetivo} {conquista.tipo === 'max_streak' ? 'dias de streak' : 'ações'}
-                  </Text>
-                </View>
+                <Text style={styles.progressoConquistaTexto}>
+                  Meta:{' '}
+                  {conquista.tipo === 'max_streak'
+                    ? `${conquista.objetivo} dias de streak`
+                    : conquista.tipo === 'contagem_acao'
+                    ? `completar ${conquista.objetivo}x`
+                    : conquista.tipo === 'acoes_ids'
+                    ? `completar ${conquista.idsNecessarios?.length} atividades específicas`
+                    : `${conquista.objetivo} ações`}
+                </Text>
               )}
             </View>
             {ganhou && (
@@ -2172,19 +2399,37 @@ export default function ConquistasScreen() {
       {historico.length > 0 && (
         <>
           <Text style={styles.secaoTitulo}>Histórico recente</Text>
-          {historico.slice(0, 10).map(item => (
-            <View key={item.id} style={styles.historicoItem}>
-              <View style={styles.historicoInfo}>
-                <Text style={styles.historicoAcao}>{item.acao}</Text>
-                <Text style={styles.historicoData}>
-                  {new Date(item.data).toLocaleDateString('pt-BR', {
-                    day: '2-digit', month: 'short',
-                  })}
+          {historico.slice(0, 10).map((item) => {
+            const carbono = item.idAtividade ? carbonoPorId[item.idAtividade] : null;
+            return (
+              <View key={item.id} style={styles.historicoItem}>
+                <View style={styles.historicoInfo}>
+                  <Text style={styles.historicoAcao}>{item.acao}</Text>
+                  <View style={styles.historicoMetaRow}>
+                    <Text style={styles.historicoData}>
+                      {new Date(item.data).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: 'short',
+                      })}
+                    </Text>
+                    {carbono && carbono > 0 && (
+                      <Text style={styles.historicoCarbono}>
+                        · -{carbono} kgCO₂e
+                      </Text>
+                    )}
+                  </View>
+                </View>
+                <Text
+                  style={[
+                    styles.historicoPontos,
+                    item.pontos < 0 && styles.historicoPontosNegativo,
+                  ]}
+                >
+                  {item.pontos > 0 ? '+' : ''}{item.pontos} pts
                 </Text>
               </View>
-              <Text style={styles.historicoPontos}>+{item.pontos} pts</Text>
-            </View>
-          ))}
+            );
+          })}
         </>
       )}
 
@@ -2218,58 +2463,57 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   statItem: { alignItems: 'center' },
-  statNumero: {
-    color: '#f1f7ed',
-    fontSize: 28,
-    fontWeight: 'bold',
-  },
-  statLabel: {
-    color: '#a8c09a',
-    fontSize: 12,
-    marginTop: 2,
-  },
+  statNumero: { color: '#f1f7ed', fontSize: 28, fontWeight: 'bold' },
+  statLabel: { color: '#a8c09a', fontSize: 12, marginTop: 2 },
   separador: {
     width: 1,
     height: 40,
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
+
+  // Carbono
+  carbonoCard: {
+    backgroundColor: 'rgba(194, 168, 62, 0.2)',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#c2a83e',
+  },
+  carbonoNumero: {
+    color: '#c2a83e',
+    fontSize: 34,
+    fontWeight: 'bold',
+  },
+  carbonoUnidade: {
+    color: '#e0eec6',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  carbonoComparacao: {
+    color: '#a8c09a',
+    fontSize: 11,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+
+  // Top ações
   topAcoes: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255,255,255,0.15)',
     paddingTop: 14,
   },
-  topTitulo: {
-    color: '#c5d4b5',
-    fontSize: 12,
-    marginBottom: 8,
-  },
+  topTitulo: { color: '#c5d4b5', fontSize: 12, marginBottom: 8 },
   topItem: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 6,
   },
-  topPos: {
-    color: '#c2a83e',
-    fontWeight: 'bold',
-    width: 24,
-    fontSize: 13,
-  },
-  topAcao: {
-    flex: 1,
-    color: '#f1f7ed',
-    fontSize: 13,
-  },
-  topQtd: {
-    color: '#7ca982',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  semDados: {
-    color: '#a8c09a',
-    textAlign: 'center',
-    fontSize: 14,
-    marginTop: 8,
-  },
+  topPos: { color: '#c2a83e', fontWeight: 'bold', width: 24, fontSize: 13 },
+  topAcao: { flex: 1, color: '#f1f7ed', fontSize: 13 },
+  topQtd: { color: '#7ca982', fontWeight: '700', fontSize: 13 },
+  semDados: { color: '#a8c09a', textAlign: 'center', fontSize: 14, marginTop: 8 },
 
   // Seção
   secaoTitulo: {
@@ -2294,31 +2538,16 @@ const styles = StyleSheet.create({
     borderColor: '#e0eec6',
     backgroundColor: '#f8faf5',
   },
-  conquistaIcone: {
-    fontSize: 32,
-    marginRight: 14,
-  },
+  conquistaIcone: { fontSize: 32, marginRight: 14 },
   conquistaInfo: { flex: 1 },
   conquistaTitulo: {
     fontSize: 15,
     fontWeight: '700',
     color: '#515a47',
   },
-  conquistaTextoBloqueado: {
-    color: '#bbb',
-  },
-  conquistaDescricao: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 3,
-  },
-  progressoConquista: {
-    marginTop: 6,
-  },
-  progressoConquistaTexto: {
-    fontSize: 11,
-    color: '#aaa',
-  },
+  conquistaTextoBloqueado: { color: '#bbb' },
+  conquistaDescricao: { fontSize: 12, color: '#666', marginTop: 3 },
+  progressoConquistaTexto: { fontSize: 11, color: '#aaa', marginTop: 4 },
   conquistaBadge: {
     backgroundColor: '#c2a83e',
     borderRadius: 12,
@@ -2327,11 +2556,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  conquistaBadgeTexto: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 14,
-  },
+  conquistaBadgeTexto: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 
   // Histórico
   historicoItem: {
@@ -2346,21 +2571,16 @@ const styles = StyleSheet.create({
     borderLeftColor: '#7ca982',
   },
   historicoInfo: { flex: 1 },
-  historicoAcao: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-  },
-  historicoData: {
-    fontSize: 12,
-    color: '#999',
-    marginTop: 2,
-  },
+  historicoAcao: { fontSize: 14, fontWeight: '600', color: '#333' },
+  historicoMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  historicoData: { fontSize: 12, color: '#999' },
+  historicoCarbono: { fontSize: 11, color: '#515a47', marginLeft: 4 },
   historicoPontos: {
     fontSize: 14,
     fontWeight: '700',
     color: '#7ca982',
   },
+  historicoPontosNegativo: { color: '#c05050' },
 });
 
 ----------------------------------------------------------------------

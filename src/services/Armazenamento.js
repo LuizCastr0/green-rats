@@ -72,7 +72,50 @@ export function getChaveDoDia(data) {
 // e recalcula o streak corretamente.
 // ─────────────────────────────────────────────────────────────────────────────
 
+export async function atualizarStreak() {
+  try {
+    const hoje = new Date();
+    const hojeStr = hoje.toISOString().slice(0, 10); // "2025-06-10"
 
+    const dadosStreak = await carregar(CHAVES.streak, {
+      contagem: 0,
+      ultimaData: null,
+    });
+
+    const ultimaData = dadosStreak.ultimaData; // "2025-06-09" ou null
+
+    // Já registrou algo hoje — não altera nada
+    if (ultimaData === hojeStr) {
+      return dadosStreak;
+    }
+
+    // Calculando diferença em dias
+    let novaContagem;
+    if (ultimaData === null) {
+      // Primeira vez usando o app
+      novaContagem = 1;
+    } else {
+      const ontem = new Date(hoje);
+      ontem.setDate(ontem.getDate() - 1);
+      const ontemStr = ontem.toISOString().slice(0, 10);
+
+      if (ultimaData === ontemStr) {
+        // Usou ontem → sequência continua
+        novaContagem = dadosStreak.contagem + 1;
+      } else {
+        // Pulou um ou mais dias → reseta
+        novaContagem = 1;
+      }
+    }
+
+    const novoStreak = { contagem: novaContagem, ultimaData: hojeStr };
+    await salvar(CHAVES.streak, novoStreak);
+    return novoStreak;
+  } catch (error) {
+    console.error('Erro ao atualizar streak:', error);
+    return { contagem: 0, ultimaData: null };
+  }
+}
 
 
 
@@ -406,49 +449,36 @@ export async function verificarViradaDeDia() {
 
 export async function simularViradaDia() {
   try {
-    const CHAVE_ATIVIDADES = 'rat:atividadesConcluidasHoje';
+    const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
+    const objetivosHoje = await carregarObjetivosAtuais();
 
-    const statusAtividades = await carregar(CHAVE_ATIVIDADES, {
-      data: null,
-      ids: [],
-    });
+    const streakAnterior = dadosStreak.contagem;
+    const ultimaData = dadosStreak.ultimaData;
 
-    // A data "de hoje" para a simulação é o que está salvo em atividadesConcluidasHoje,
-    // ou a data real se nunca foi salvo nada.
-    const diaQueEstaSendoEncerrado =
-      statusAtividades.data ?? new Date().toISOString().slice(0, 10);
-
-    const teveAtividade =
-      Array.isArray(statusAtividades.ids) && statusAtividades.ids.length > 0;
-
-    const streakAnterior = (await carregarStreak()).contagem;
-
-    // Processa o streak do dia que está sendo encerrado
-    const novoStreak = await processarStreakDaVirada(
-      diaQueEstaSendoEncerrado,
-      teveAtividade,
-    );
-
-    // Calcula o "amanhã" como próximo dia da simulação
-    const base = new Date(diaQueEstaSendoEncerrado);
+    // Avança 1 dia a partir da última data conhecida (ou hoje)
+    const base = ultimaData ? new Date(ultimaData + 'T12:00:00') : new Date();
     base.setDate(base.getDate() + 1);
-    base.setHours(0, 0, 0, 0);
-    const proximoDia = base.toISOString().slice(0, 10);
+    const novaDataStr = base.toISOString().slice(0, 10);
 
-    // Abre o novo dia simulado com lista vazia
-    await salvar(CHAVE_ATIVIDADES, { data: proximoDia, ids: [] });
+    // Tinha atividade "hoje" (antes da virada simulada)?
+    const teveAtividade = objetivosHoje.length > 0;
+    const streakAtual = teveAtividade ? streakAnterior + 1 : 1;
+
+    await salvar(CHAVES.streak, {
+      contagem: streakAtual,
+      ultimaData: novaDataStr,
+    });
+    await removerObjetivosAtuais();
 
     return {
-      sucesso: true,
-      diaEncerrado: diaQueEstaSendoEncerrado,
-      proximoDia,
-      teveAtividade,
       streakAnterior,
-      streakAtual: novoStreak.contagem,
+      streakAtual,
+      atividadesResetadas: objetivosHoje.length,
+      dataSimulada: base.toLocaleDateString('pt-BR'),
     };
   } catch (error) {
     console.error('[dev] Erro ao simular virada de dia:', error);
-    return { sucesso: false, erro: String(error) };
+    throw error;
   }
 }
 
@@ -493,4 +523,9 @@ export async function limparDadosDoUsuario() {
     console.error("[Armazenamento] Erro ao limpar dados do usuário:", error);
     throw error;
   }
+}
+
+// alias usado pela DevScreen
+export async function resetarTudo() {
+  await AsyncStorage.clear();
 }

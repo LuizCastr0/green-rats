@@ -8,6 +8,7 @@ import {
   StyleSheet, Alert, ActivityIndicator,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { CommonActions } from '@react-navigation/native';
 
 import {
   simularViradaDia,
@@ -27,14 +28,11 @@ export default function DevScreen({ navigation }) {
   const [carregando, setCarregando] = useState(false);
   const [estadoAtual, setEstadoAtual] = useState(null);
 
-  // ── Carrega o estado atual sempre que a tela abre ─────────────────────────
   async function carregarEstado() {
     const streak = await carregarStreak();
     const pontos = await carregarPontuacao();
     const historico = await carregarHistorico();
 
-    // lê as atividades concluídas hoje direto da chave para não depender
-    // de importar services/atividades (evita circular)
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
     let atividadesHoje = { data: null, ids: [] };
     try {
@@ -44,9 +42,7 @@ export default function DevScreen({ navigation }) {
 
     setEstadoAtual({
       streak: streak.contagem,
-      ultimaData: streak.ultimaData
-        ? new Date(streak.ultimaData).toLocaleDateString('pt-BR')
-        : 'nunca',
+      ultimaData: streak.ultimaData ?? 'nunca',
       pontos,
       totalAcoes: historico.length,
       atividadesHoje: atividadesHoje.ids?.length ?? 0,
@@ -60,7 +56,6 @@ export default function DevScreen({ navigation }) {
     }, [])
   );
 
-  // ── Helper para executar ação e atualizar tudo ────────────────────────────
   async function executar(label, fn) {
     setCarregando(true);
     setLog(`Executando: ${label}...`);
@@ -74,8 +69,6 @@ export default function DevScreen({ navigation }) {
     }
     setCarregando(false);
   }
-
-  // ── Ações ─────────────────────────────────────────────────────────────────
 
   async function handleAvancarDia() {
     await executar('Avançar dia', async () => {
@@ -105,33 +98,25 @@ export default function DevScreen({ navigation }) {
     });
   }
 
-  function handleResetarTudo() {
-    Alert.alert(
-      '⚠️ Reset total',
-      'Apaga TODOS os dados do app. Isso não pode ser desfeito.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Resetar',
-          style: 'destructive',
-          onPress: async () => {
-            await executar('Reset total', async () => {
-              await resetarTudo();
-              // volta para o setup depois de resetar
-              navigation.reset({ index: 0, routes: [{ name: 'Setup' }] });
-              return '✅ Tudo apagado. Voltando para o setup.';
-            });
-          },
-        },
-      ]
-    );
+  async function handleResetarTudo() {
+    setCarregando(true);
+    setLog('Resetando...');
+    try {
+      await resetarTudo();
+      setLog('✅ Resetado. Navegando...');
+      console.log('reset feito');
+      console.log('nav id:', navigation.getId?.());
+      console.log('parent:', navigation.getParent?.()?.getId?.());
+    } catch (e) {
+      setLog(`❌ Erro: ${String(e)}`);
+      console.log('erro:', e);
+    }
+    setCarregando(false);
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <ScrollView style={s.scroll} contentContainerStyle={s.container}>
 
-      {/* Cabeçalho */}
       <View style={s.header}>
         <Text style={s.titulo}>🛠️ Dev Tools</Text>
         <Text style={s.subtitulo}>Não mostrar para usuários</Text>
@@ -140,7 +125,6 @@ export default function DevScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
-      {/* Estado atual */}
       {estadoAtual && (
         <View style={s.card}>
           <Text style={s.cardTitulo}>Estado atual no AsyncStorage</Text>
@@ -155,7 +139,6 @@ export default function DevScreen({ navigation }) {
         </View>
       )}
 
-      {/* Ações de dia */}
       <View style={s.card}>
         <Text style={s.cardTitulo}>Simulação de tempo</Text>
         <Text style={s.cardDica}>
@@ -191,17 +174,15 @@ export default function DevScreen({ navigation }) {
         />
       </View>
 
-      {/* Pontos */}
       <View style={s.card}>
         <Text style={s.cardTitulo}>Pontos</Text>
         <View style={s.botoesRow}>
-          <BotaoDev label="+50 pts" cor="#7ca982" onPress={() => handleAdicionarPontos(50)} disabled={carregando} small />
-          <BotaoDev label="+200 pts" cor="#7ca982" onPress={() => handleAdicionarPontos(200)} disabled={carregando} small />
+          <BotaoDev label="+50 pts"   cor="#7ca982" onPress={() => handleAdicionarPontos(50)}   disabled={carregando} small />
+          <BotaoDev label="+200 pts"  cor="#7ca982" onPress={() => handleAdicionarPontos(200)}  disabled={carregando} small />
           <BotaoDev label="+1000 pts" cor="#7ca982" onPress={() => handleAdicionarPontos(1000)} disabled={carregando} small />
         </View>
       </View>
 
-      {/* Ferramentas */}
       <View style={s.card}>
         <Text style={s.cardTitulo}>Ferramentas</Text>
         <BotaoDev
@@ -228,7 +209,6 @@ export default function DevScreen({ navigation }) {
         />
       </View>
 
-      {/* Console de saída */}
       <View style={s.console}>
         <Text style={s.consoleTitulo}>{'>'} output</Text>
         {carregando
@@ -241,8 +221,6 @@ export default function DevScreen({ navigation }) {
     </ScrollView>
   );
 }
-
-// ── Componentes auxiliares ────────────────────────────────────────────────────
 
 function LinhaInfo({ label, valor }) {
   return (
@@ -264,8 +242,6 @@ function BotaoDev({ label, cor, onPress, disabled, small }) {
     </TouchableOpacity>
   );
 }
-
-// ── Estilos ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
   scroll: { backgroundColor: '#1a1a1a' },

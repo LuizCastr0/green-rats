@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,16 +9,23 @@ import { carregarProgresso } from './src/services/Armazenamento';
 
 const Stack = createNativeStackNavigator();
 
-function RootNavigator() {
+function RootNavigator({ onResetRef }) {
   const [telaInicial, setTelaInicial] = useState(null);
 
+  const verificarSetup = useCallback(async () => {
+    setTelaInicial(null); // força tela de loading enquanto verifica
+    const progresso = await carregarProgresso();
+    setTelaInicial(progresso?.nome ? 'Main' : 'Setup');
+  }, []);
+
   useEffect(() => {
-    async function verificarSetup() {
-      const progresso = await carregarProgresso();
-      setTelaInicial(progresso?.nome ? 'Main' : 'Setup');
-    }
     verificarSetup();
   }, []);
+
+  // Expõe a função de reverificação para a DevScreen chamar via ref
+  useEffect(() => {
+    if (onResetRef) onResetRef.current = verificarSetup;
+  }, [verificarSetup]);
 
   if (telaInicial === null) {
     return (
@@ -37,10 +44,12 @@ function RootNavigator() {
 }
 
 export default function App() {
+  const onResetRef = React.useRef(null);
+
   return (
     <UserProvider>
       <NavigationContainer>
-        <RootNavigator />
+        <RootNavigator onResetRef={onResetRef} />
       </NavigationContainer>
     </UserProvider>
   );

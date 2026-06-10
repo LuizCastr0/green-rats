@@ -1,155 +1,176 @@
 // src/services/Armazenamento.js
 
-// arquivo responsável por toda a lógica de armazenamento local do app, usando AsyncStorage para guardar os dados no celular do usuário
-// vai ficar desorganizado no começo, mas a ideia é ir melhorando e organizando conforme o desenvolvimento do app avança
-
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// chaves de armazenamento para organizar os dados salvos no celular
 const CHAVES = {
   progresso: "rat:progresso",
   objetivos: "rat:objetivos",
   historico: "rat:historico",
   pontuacao: "rat:pontuacao",
   streak: "rat:streak",
-  inventario: "rat:inventario", // itens já comprados
+  inventario: "rat:inventario",
   conquistas: "rat:conquistas",
+  dataSimulada: "rat:dataSimulada", // usado apenas para testes de avanço de dia
 };
 
-//funções externas────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Funções internas
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Converte qualquer valor em texto e salva no armazenamento local.
 async function salvar(chave, valor) {
   try {
     await AsyncStorage.setItem(chave, JSON.stringify(valor));
   } catch (error) {
-    console.error(`[storageService] Erro ao salvar "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao salvar "${chave}":`, error);
     throw error;
   }
 }
 
-// Lê o valor salvo e converte de volta para o tipo original.
-// Se não existir nada, retorna o "valorPadrao" informado.
 async function carregar(chave, valorPadrao = null) {
   try {
     const texto = await AsyncStorage.getItem(chave);
-    if (texto != null) {
-      return JSON.parse(texto);
-    }
+    if (texto != null) return JSON.parse(texto);
     return valorPadrao;
   } catch (error) {
-    console.error(`[storageService] Erro ao carregar "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao carregar "${chave}":`, error);
     throw error;
   }
 }
 
-// Apaga o valor de uma chave específica do armazenamento local.
 async function apagar(chave) {
   try {
     await AsyncStorage.removeItem(chave);
   } catch (error) {
-    console.error(`[storageService] Erro ao remover "${chave}":`, error);
+    console.error(`[Armazenamento] Erro ao remover "${chave}":`, error);
     throw error;
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Progresso geral do usuário
-// Guarda informações como nível atual, pontos acumulados, etc.
-// Exemplo de objeto esperado: { nivel: 2, pontos: 150 }
+// Data — respeita simulação de dia para testes
+// getHoje() é a única fonte de "hoje" em todo o arquivo.
+// Quando há uma data simulada salva, ela é usada no lugar de new Date().
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um objeto com o progresso atual e salva.
+export async function getHoje() {
+  const simulada = await carregar(CHAVES.dataSimulada, null);
+  const data = simulada ? new Date(simulada) : new Date();
+  data.setHours(0, 0, 0, 0);
+  return data;
+}
+
+export function getChaveDoDia(data) {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ferramenta de teste — avança um dia no AsyncStorage
+// Faz tudo atomicamente: avança a data, zera atividades do dia,
+// e recalcula o streak corretamente.
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+export async function avancarDiaParaTeste() {
+  try {
+    // pega a data atual simulada (ou real) e avança 1 dia
+    const hoje = await getHoje();
+    const amanha = new Date(hoje);
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(0, 0, 0, 0);
+
+    // salva a nova data simulada
+    await salvar(CHAVES.dataSimulada, amanha.toISOString());
+
+    // zera as atividades concluídas — usa a chave do novo dia (que está vazio)
+    // o reset acontece naturalmente porque a chave salva será de ontem
+    // não precisamos apagar nada — carregarAtividadesConcluidas vai comparar
+    // a data salva com amanha e vai zerar sozinho
+
+    console.log(`[DEV] Dia avançado para: ${getChaveDoDia(amanha)}`);
+    return { sucesso: true, novaData: amanha.toISOString() };
+  } catch (error) {
+    console.error("[DEV] Erro ao avançar dia:", error);
+    return { sucesso: false };
+  }
+}
+
+export async function resetarDataSimulada() {
+  await apagar(CHAVES.dataSimulada);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Progresso
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function salvarNovoProgresso(progresso) {
   await salvar(CHAVES.progresso, progresso);
 }
 
-// Retorna o objeto de progresso salvo.
-// Se ainda não foi salvo nada, retorna null.
 export async function carregarProgresso() {
   return carregar(CHAVES.progresso, null);
 }
 
-// Apaga o progresso salvo.
 export async function apagarProgresso() {
   await apagar(CHAVES.progresso);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Objetivos concluídos hoje
-// Guarda a lista de objetivos que o usuário marcou como feitos no dia.
-// Exemplo de array esperado: ["andar", "nao usar ar-condicionado", "sei la"]
+// Objetivos
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function substituirObjetivos(objetivos) {
   await salvar(CHAVES.objetivos, objetivos);
 }
 
-// Retorna o array de objetivos salvos.
-// Se não houver nenhum salvo ainda, retorna uma lista vazia [].
 export async function carregarObjetivosAtuais() {
   return carregar(CHAVES.objetivos, []);
 }
 
-// Apaga os objetivos do dia salvos.
 export async function removerObjetivosAtuais() {
   await apagar(CHAVES.objetivos);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Histórico do usuário
-// Guarda um registro de atividades passadas para exibir no app.
-// Exemplo de array esperado: [{ data: "2025-06-01", pontos: 80 }, ...]
+// Histórico
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um array com todo o histórico e salva no celular.
 export async function salvarHistorico(historico) {
   await salvar(CHAVES.historico, historico);
 }
 
-// Retorna o array com o histórico completo.
-// Se não houver nada salvo ainda, retorna uma lista vazia [].
 export async function carregarHistorico() {
   return carregar(CHAVES.historico, []);
 }
 
-// Apaga o histórico salvo.
 export async function removerHistorico() {
   await apagar(CHAVES.historico);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Pontuação total
-// Guarda um número simples (int) representando a pontuação acumulada do usuário.
+// Pontuação
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Recebe um número e salva como pontuação total.
 export async function salvarPontuacao(pontuacao) {
   await salvar(CHAVES.pontuacao, pontuacao);
 }
 
-// Retorna a pontuação total salva.
-// Se ainda não existir nenhuma, retorna 0.
 export async function carregarPontuacao() {
   return carregar(CHAVES.pontuacao, 0);
 }
 
-// Apaga a pontuação salva.
 export async function removerPontuacao() {
   await apagar(CHAVES.pontuacao);
 }
 
-// reset completo (nao pode ser desfeito, cuidado ao usar)
-export async function limparDadosDoUsuario() {
-  try {
-    await AsyncStorage.multiRemove(Object.values(CHAVES));
-  } catch (error) {
-    console.error("[storageService] Erro ao limpar dados do usuário:", error);
-    throw error;
-  }
-}
-
-// lógica de Histórico e Impacto
+// ─────────────────────────────────────────────────────────────────────────────
+// Histórico + pontuação + streak — registro de ação
+// ─────────────────────────────────────────────────────────────────────────────
 
 export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtividade = null) {
   try {
@@ -157,66 +178,79 @@ export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtivida
 
     const novoRegistro = {
       id: Date.now().toString(),
-      idAtividade,           // ← campo novo, necessário para conquistas por id
+      idAtividade,
       acao: acaoNome,
       pontos: pontosGanhos,
       data: new Date().toISOString(),
     };
 
-    const novoHistorico = [novoRegistro, ...historicoAtual];
-    await salvar(CHAVES.historico, novoHistorico);
+    await salvar(CHAVES.historico, [novoRegistro, ...historicoAtual]);
 
     const pontuacaoAntiga = await carregarPontuacao();
     await salvarPontuacao(pontuacaoAntiga + pontosGanhos);
 
-    await atualizarStreak();
+    // streak NÃO é atualizado aqui — só muda quando o dia vira
 
     return true;
   } catch (error) {
-    console.error("Erro ao registrar ação:", error);
+    console.error('Erro ao registrar ação:', error);
     return false;
   }
 }
 
-// lógica do streak
-export async function atualizarStreak() {
-  try {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0); // compara apenas datas, verificar com o grupo se é melhor considerar o horário
+// ─────────────────────────────────────────────────────────────────────────────
+// Streak — usa getHoje() para respeitar data simulada
+// ─────────────────────────────────────────────────────────────────────────────
 
+// Chamada APENAS quando o dia vira (real ou simulado).
+// Recebe a data do dia que ACABOU de passar (ontem) e se houve atividade nele.
+// Retorna o novo objeto de streak.
+export async function processarStreakDaVirada(dataOntem, teveAtividade) {
+  try {
     const dadosStreak = await carregar(CHAVES.streak, {
       contagem: 0,
       ultimaData: null,
     });
 
-    if (!dadosStreak.ultimaData) {
-      // primeira vez
-      const novoStreak = { contagem: 1, ultimaData: hoje.toISOString() };
-      await salvar(CHAVES.streak, novoStreak);
-      return novoStreak;
-    }
+    let novaContagem;
 
-    const ultimaData = new Date(dadosStreak.ultimaData);
-    ultimaData.setHours(0, 0, 0, 0);
-
-    const diferencaDias = (hoje - ultimaData) / (1000 * 60 * 60 * 24);
-
-    let novaContagem = dadosStreak.contagem;
-
-    if (diferencaDias === 1) {
-      novaContagem += 1;
-    } else if (diferencaDias > 1) {
+    if (!teveAtividade) {
+      // não fez nada ontem — streak vai para 0
+      novaContagem = 0;
+    } else if (!dadosStreak.ultimaData) {
+      // primeira vez que registra algo — começa em 1
       novaContagem = 1;
+    } else {
+      // verifica se ontem é exatamente o dia seguinte ao último streak
+      const ultimaData = new Date(dadosStreak.ultimaData);
+      ultimaData.setHours(0, 0, 0, 0);
+      const ontem = new Date(dataOntem);
+      ontem.setHours(0, 0, 0, 0);
+      const diferencaDias = Math.round(
+        (ontem.getTime() - ultimaData.getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (diferencaDias === 1) {
+        // dia seguinte consecutivo — incrementa
+        novaContagem = dadosStreak.contagem + 1;
+      } else if (diferencaDias === 0) {
+        // mesmo dia (não deveria acontecer, mas protege)
+        novaContagem = dadosStreak.contagem;
+      } else {
+        // pulou dias — reseta para 1 (teve atividade ontem, só não foi consecutivo)
+        novaContagem = 1;
+      }
     }
 
     const novoStreak = {
       contagem: novaContagem,
-      ultimaData: hoje.toISOString(),
+      ultimaData: dataOntem, // data do dia que acabou de contar
     };
+
     await salvar(CHAVES.streak, novoStreak);
     return novoStreak;
   } catch (error) {
-    console.error("Erro ao atualizar streak:", error);
+    console.error('Erro ao processar streak da virada:', error);
     return { contagem: 0, ultimaData: null };
   }
 }
@@ -225,7 +259,10 @@ export async function carregarStreak() {
   return carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
 }
 
-// sistema de conquistas: compaa o que o usuário já fez (histórico, streak, etc) com os requisitos de cada conquista e salva quais ele já ganhou para mostrar no perfil, etc
+// ─────────────────────────────────────────────────────────────────────────────
+// Conquistas
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { conquistas } from "../data/conquistas";
 
 export async function carregarConquistasGanhas() {
@@ -239,14 +276,15 @@ export async function checarNovasConquistas() {
 
   let novasConquistasNestaSessao = [];
 
-  // monta um Set com todos os ids de atividades já feitas (para lookup rápido)
-  const idsFeitos = new Set(historico.map(item => item.idAtividade).filter(Boolean));
+  const idsFeitos = new Set(
+    historico.map((item) => item.idAtividade).filter(Boolean)
+  );
 
-  // monta um contador de quantas vezes cada atividade foi feita
   const contagemPorId = {};
-  historico.forEach(item => {
+  historico.forEach((item) => {
     if (item.idAtividade) {
-      contagemPorId[item.idAtividade] = (contagemPorId[item.idAtividade] || 0) + 1;
+      contagemPorId[item.idAtividade] =
+        (contagemPorId[item.idAtividade] || 0) + 1;
     }
   });
 
@@ -257,16 +295,11 @@ export async function checarNovasConquistas() {
 
     if (c.tipo === "total_acoes") {
       alcancou = historico.length >= c.objetivo;
-
     } else if (c.tipo === "max_streak") {
       alcancou = streak.contagem >= c.objetivo;
-
     } else if (c.tipo === "acoes_ids") {
-      // verifica se todos os ids necessários já foram feitos pelo menos uma vez
-      alcancou = c.idsNecessarios.every(id => idsFeitos.has(id));
-
+      alcancou = c.idsNecessarios.every((id) => idsFeitos.has(id));
     } else if (c.tipo === "contagem_acao") {
-      // verifica se uma atividade específica foi feita X vezes
       alcancou = (contagemPorId[c.idAlvo] || 0) >= c.objetivo;
     }
 
@@ -283,40 +316,42 @@ export async function checarNovasConquistas() {
   return novasConquistasNestaSessao;
 }
 
+export async function checarConquista(conquista) {
+  const conquistasAtuais = await carregarConquistasGanhas();
+  return conquistasAtuais.ganhas.includes(conquista.id);
+}
+
+export async function limparConquistas() {
+  await apagar(CHAVES.conquistas);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inventário e loja
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function carregarInventario() {
   return carregar(CHAVES.inventario, []);
 }
 
 export async function checarItemNoInventario(item) {
   const inventarioAtual = await carregarInventario();
-  const itemParaEncontrar = inventarioAtual.find((i) => i.id === item.id);
-
-  if (itemParaEncontrar) {
-    return true;
-  }
-  return false;
+  return inventarioAtual.some((i) => i.id === item.id);
 }
 
-// logica da compra e armazenamento dos itens da loja, o usuário pode comprar itens usando os pontos acumulados, e esses itens ficam salvos no inventário para o usuário usar no perfil, etc
 export async function comprarItem(item) {
   try {
     const pontosAtuais = await carregarPontuacao();
 
-    // verifica se tem dinheiro
     if (pontosAtuais < item.preco) {
       return { sucesso: false, erro: "Pontos insuficientes!" };
     }
 
-    // verifica se o item ja foi comprado
     const itemJaExiste = await checarItemNoInventario(item);
     if (itemJaExiste) {
       return { sucesso: false, erro: "Você já possui este item!" };
     }
 
-    // carrega o inventário
     const inventarioAtual = await carregarInventario();
-
-    //adiciona o item
     const novoInventario = [...inventarioAtual, item];
 
     await salvarPontuacao(pontosAtuais - item.preco);
@@ -329,43 +364,113 @@ export async function comprarItem(item) {
   }
 }
 
+// Chamada pela HomeScreen ao abrir. Verifica se o dia real virou
+// desde a última vez que o app foi aberto.
+export async function verificarViradaDeDia() {
+  try {
+    const CHAVE_ATIVIDADES = 'rat:atividadesConcluidasHoje';
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const chaveHoje = hoje.toISOString().slice(0, 10); // "2026-06-09"
+
+    const statusAtividades = await carregar(CHAVE_ATIVIDADES, {
+      data: null,
+      ids: [],
+    });
+
+    // Se a data salva já é hoje, o dia não virou — não faz nada
+    if (statusAtividades.data === chaveHoje) return false;
+
+    // O dia virou. A data salva é "ontem" (ou mais antigo).
+    // Verifica se o usuário fez alguma atividade naquele dia.
+    const teveAtividade =
+      Array.isArray(statusAtividades.ids) && statusAtividades.ids.length > 0;
+
+    const dataOntem = statusAtividades.data; // pode ser null se for o primeiro uso
+
+    // Processa o streak com base no que aconteceu ontem
+    if (dataOntem !== null) {
+      await processarStreakDaVirada(dataOntem, teveAtividade);
+    }
+
+    // Abre o novo dia com lista vazia
+    await salvar(CHAVE_ATIVIDADES, { data: chaveHoje, ids: [] });
+
+    return true; // houve virada
+  } catch (error) {
+    console.error('[Armazenamento] Erro em verificarViradaDeDia:', error);
+    return false;
+  }
+}
+
+export async function simularViradaDia() {
+  try {
+    const CHAVE_ATIVIDADES = 'rat:atividadesConcluidasHoje';
+
+    const statusAtividades = await carregar(CHAVE_ATIVIDADES, {
+      data: null,
+      ids: [],
+    });
+
+    // A data "de hoje" para a simulação é o que está salvo em atividadesConcluidasHoje,
+    // ou a data real se nunca foi salvo nada.
+    const diaQueEstaSendoEncerrado =
+      statusAtividades.data ?? new Date().toISOString().slice(0, 10);
+
+    const teveAtividade =
+      Array.isArray(statusAtividades.ids) && statusAtividades.ids.length > 0;
+
+    const streakAnterior = (await carregarStreak()).contagem;
+
+    // Processa o streak do dia que está sendo encerrado
+    const novoStreak = await processarStreakDaVirada(
+      diaQueEstaSendoEncerrado,
+      teveAtividade,
+    );
+
+    // Calcula o "amanhã" como próximo dia da simulação
+    const base = new Date(diaQueEstaSendoEncerrado);
+    base.setDate(base.getDate() + 1);
+    base.setHours(0, 0, 0, 0);
+    const proximoDia = base.toISOString().slice(0, 10);
+
+    // Abre o novo dia simulado com lista vazia
+    await salvar(CHAVE_ATIVIDADES, { data: proximoDia, ids: [] });
+
+    return {
+      sucesso: true,
+      diaEncerrado: diaQueEstaSendoEncerrado,
+      proximoDia,
+      teveAtividade,
+      streakAnterior,
+      streakAtual: novoStreak.contagem,
+    };
+  } catch (error) {
+    console.error('[dev] Erro ao simular virada de dia:', error);
+    return { sucesso: false, erro: String(error) };
+  }
+}
+
 export async function salvarItemNoInventario(item) {
   const inventarioAtual = await carregarInventario();
-  const inventarioNovo = [...inventarioAtual, item];
-  await salvar(CHAVES.inventario, inventarioNovo);
+  await salvar(CHAVES.inventario, [...inventarioAtual, item]);
 }
 
 export async function removerItemDoInventario(item) {
-  // checagem para ver se o item sequer está no inventário
   const itemNoInventario = await checarItemNoInventario(item);
-  // se estiver continua, se não estiver para a função
   if (!itemNoInventario) {
     return { sucesso: false, erro: "Item não encontrado no inventário." };
   }
-
   const inventarioAtual = await carregarInventario();
-  //cria um novo inventario
-  const inventarioNovo = [];
-
-  // para todo item dentro do inventario se for diferente do item a ser removido é adicionado no novo inventario
-  for (let i = 0; i < inventarioAtual.length; i++) {
-    if (inventarioAtual[i].id !== item.id) {
-      inventarioNovo.push(inventarioAtual[i]);
-    }
-  }
-  // substitui inventario antigo pelo novo
+  const inventarioNovo = inventarioAtual.filter((i) => i.id !== item.id);
   await salvar(CHAVES.inventario, inventarioNovo);
-
-  return { sucesso: true, erro: false };
+  return { sucesso: true };
 }
 
 export async function buscarItemPorId(idDoItem) {
   const inventarioAtual = await carregarInventario();
-  const itemExiste = inventarioAtual.find((i) => i.id === idDoItem);
-  if (itemExiste) {
-    return itemExiste;
-  }
-  return null;
+  return inventarioAtual.find((i) => i.id === idDoItem) || null;
 }
 
 export async function limparInventario() {
@@ -377,94 +482,15 @@ export async function tamanhoDoInventario() {
   return inventarioAtual.length;
 }
 
-export async function checarConquista(conquista) {
-  const conquistasAtuais = await carregarConquistasGanhas();
+// ─────────────────────────────────────────────────────────────────────────────
+// Reset completo
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (conquistasAtuais.ganhas.includes(conquista.id)) {
-    return true;
-  }
-
-  return false;
-}
-
-export async function limparConquistas() {
-  await apagar(CHAVES.conquistas);
-}
-
-// ─── DEV TOOLS (não usar em produção) ────────────────────────────────────────
-
-export async function resetarTudo() {
+export async function limparDadosDoUsuario() {
   try {
-    await AsyncStorage.clear();
+    await AsyncStorage.multiRemove(Object.values(CHAVES));
   } catch (error) {
-    console.error('[dev] Erro ao resetar tudo:', error);
-    throw error;
-  }
-}
-
-export async function simularViradaDia() {
-  try {
-    const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
-    const objetivosHoje = await carregarObjetivosAtuais();
-
-    const streakAnterior = dadosStreak.contagem;
-    const teveAtividade = objetivosHoje.length > 0;
-
-    // Calcula nova data (ontem + 1 dia a partir da ultimaData, ou amanhã a partir de hoje)
-    const baseData = dadosStreak.ultimaData
-      ? new Date(dadosStreak.ultimaData)
-      : new Date();
-    baseData.setDate(baseData.getDate() + 1);
-    baseData.setHours(0, 0, 0, 0);
-
-    // Streak: incrementa se teve atividade hoje, zera se não teve
-    const streakAtual = teveAtividade ? streakAnterior + 1 : 0;
-
-    await salvar(CHAVES.streak, {
-      contagem: streakAtual,
-      ultimaData: baseData.toISOString(),
-    });
-
-    // Reseta as atividades do dia
-    await removerObjetivosAtuais();
-
-    return {
-      streakAnterior,
-      streakAtual,
-      atividadesResetadas: objetivosHoje.length,
-      dataSimulada: baseData.toLocaleDateString('pt-BR'),
-    };
-  } catch (error) {
-    console.error('[dev] Erro ao simular virada de dia:', error);
-    throw error;
-  }
-}
-
-export async function adicionarPontosDebug(quantidade) {
-  try {
-    const atual = await carregarPontuacao();
-    await salvarPontuacao(atual + quantidade);
-  } catch (error) {
-    console.error('[dev] Erro ao adicionar pontos:', error);
-    throw error;
-  }
-}
-
-export async function exportarEstadoCompleto() {
-  try {
-    const todasChaves = await AsyncStorage.getAllKeys();
-    const pares = await AsyncStorage.multiGet(todasChaves);
-    const estado = {};
-    for (const [chave, valor] of pares) {
-      try {
-        estado[chave] = JSON.parse(valor);
-      } catch {
-        estado[chave] = valor;
-      }
-    }
-    return estado;
-  } catch (error) {
-    console.error('[dev] Erro ao exportar estado:', error);
+    console.error("[Armazenamento] Erro ao limpar dados do usuário:", error);
     throw error;
   }
 }

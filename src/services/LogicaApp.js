@@ -1,56 +1,51 @@
 // src/services/LogicaApp.js
 
 // aqui fica a lógica de negócio do app, o que acontece quando o usuário completa uma atividade
-
 import {
   adicionarAcaoAoHistorico,
   checarNovasConquistas,
   carregarStreak,
-} from "./Armazenamento";
+} from './Armazenamento';
 
 import {
-  checarAtividadeJaFoiConcluidaHoje,  // era atividadeJaFoiConcluidaHoje
+  checarAtividadeJaFoiConcluidaHoje,
   marcarAtividadeComoConcluida,
-} from "./atividades";
+} from './atividades';
 
 export async function registrarAtividadeCompleta(atividade) {
   try {
-    // verifica se essa atividade já foi concluída hoje
     const jaFoiConcluidaHoje = await checarAtividadeJaFoiConcluidaHoje(atividade.id);
-
 
     if (jaFoiConcluidaHoje) {
       return {
         sucesso: false,
-        erro: "Essa atividade já foi concluída hoje.",
+        erro: 'Essa atividade já foi concluída hoje.',
       };
     }
 
-    // marca a atividade como concluída no dia atual
     await marcarAtividadeComoConcluida(atividade.id);
 
-    // registra no histórico e soma os pontos da atividade
-    await adicionarAcaoAoHistorico(atividade.titulo, Number(atividade.pontos) || 0, atividade.id);
+    await adicionarAcaoAoHistorico(
+      atividade.titulo,
+      Number(atividade.pontos) || 0,
+      atividade.id,
+    );
 
+    // streak não é tocado aqui — só muda na virada de dia
 
-    // pega o streak já atualizado
     const streakInfo = await carregarStreak();
-
-    // checa se isso desbloqueou algum troféu
     const conquistasDesbloqueadas = await checarNovasConquistas();
 
-    // retorna os dados para a interface
     return {
       sucesso: true,
       novoStreak: streakInfo.contagem,
       novosTrofeus: conquistasDesbloqueadas,
     };
   } catch (error) {
-    console.error("Erro ao concluir atividade:", error);
-
+    console.error('Erro ao concluir atividade:', error);
     return {
       sucesso: false,
-      erro: "Não foi possível concluir a atividade.",
+      erro: 'Não foi possível concluir a atividade.',
     };
   }
 }

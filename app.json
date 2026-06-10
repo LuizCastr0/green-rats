@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "a464c291-4532-499b-aa71-d70ba2eb49ca"
+      }
+    },
+    "android": {
+      "package": "com.frooidss.greenrats"
+    },
+    "ios": {
+      "bundleIdentifier": "com.frooidss.greenrats",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}

@@ -989,46 +989,28 @@ export async function adicionarAcaoAoHistorico(acaoNome, pontosGanhos, idAtivida
 }
 
 // lógica do streak
-export async function atualizarStreak() {
-  try {
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0); // compara apenas datas, verificar com o grupo se é melhor considerar o horário
+export async function verificarViradaDeDia() {
+  const hoje = new Date().toDateString();
+  const dadosStreak = await carregar(CHAVES.streak, { contagem: 0, ultimaData: null });
 
-    const dadosStreak = await carregar(CHAVES.streak, {
-      contagem: 0,
-      ultimaData: null,
-    });
-
-    if (!dadosStreak.ultimaData) {
-      // primeira vez
-      const novoStreak = { contagem: 1, ultimaData: hoje.toISOString() };
-      await salvar(CHAVES.streak, novoStreak);
-      return novoStreak;
-    }
-
+  if (dadosStreak.ultimaData !== hoje) {
+    // Se a data mudou, verificamos se foi ontem (para manter streak) ou antes (para resetar)
     const ultimaData = new Date(dadosStreak.ultimaData);
-    ultimaData.setHours(0, 0, 0, 0);
+    const ontem = new Date();
+    ontem.setDate(ontem.getDate() - 1);
 
-    const diferencaDias = (hoje - ultimaData) / (1000 * 60 * 60 * 24);
+    let novaContagem = (dadosStreak.ultimaData && ultimaData.toDateString() === ontem.toDateString()) 
+      ? dadosStreak.contagem + 1 
+      : 1;
 
-    let novaContagem = dadosStreak.contagem;
-
-    if (diferencaDias === 1) {
-      novaContagem += 1;
-    } else if (diferencaDias > 1) {
-      novaContagem = 1;
-    }
-
-    const novoStreak = {
-      contagem: novaContagem,
-      ultimaData: hoje.toISOString(),
-    };
-    await salvar(CHAVES.streak, novoStreak);
-    return novoStreak;
-  } catch (error) {
-    console.error("Erro ao atualizar streak:", error);
-    return { contagem: 0, ultimaData: null };
+    // Resetamos as atividades (o "objetivos" que você usa no HomeScreen)
+    await apagar(CHAVES.objetivos);
+    
+    // Salvamos a nova data e streak
+    await salvar(CHAVES.streak, { contagem: novaContagem, ultimaData: hoje });
+    return true; // Indica que houve virada
   }
+  return false;
 }
 
 export async function carregarStreak() {
@@ -1289,53 +1271,38 @@ ARQUIVO: src/services/LogicaApp.js
 import {
   adicionarAcaoAoHistorico,
   checarNovasConquistas,
-  carregarStreak,
+  atualizarStreak, // Importamos esta função que já existe
 } from "./Armazenamento";
 
 import {
-  checarAtividadeJaFoiConcluidaHoje,  // era atividadeJaFoiConcluidaHoje
+  checarAtividadeJaFoiConcluidaHoje,
   marcarAtividadeComoConcluida,
 } from "./atividades";
 
 export async function registrarAtividadeCompleta(atividade) {
   try {
-    // verifica se essa atividade já foi concluída hoje
     const jaFoiConcluidaHoje = await checarAtividadeJaFoiConcluidaHoje(atividade.id);
 
-
     if (jaFoiConcluidaHoje) {
-      return {
-        sucesso: false,
-        erro: "Essa atividade já foi concluída hoje.",
-      };
+      return { sucesso: false, erro: "Essa atividade já foi concluída hoje." };
     }
 
-    // marca a atividade como concluída no dia atual
+    // 1. Marca atividade
     await marcarAtividadeComoConcluida(atividade.id);
-
-    // registra no histórico e soma os pontos da atividade
+    
+    // 2. Adiciona ao histórico e soma pontos (isso já chama atualizarStreak internamente no seu código atual)
     await adicionarAcaoAoHistorico(atividade.titulo, Number(atividade.pontos) || 0, atividade.id);
 
-
-    // pega o streak já atualizado
-    const streakInfo = await carregarStreak();
-
-    // checa se isso desbloqueou algum troféu
+    // 3. Checa conquistas
     const conquistasDesbloqueadas = await checarNovasConquistas();
 
-    // retorna os dados para a interface
     return {
       sucesso: true,
-      novoStreak: streakInfo.contagem,
       novosTrofeus: conquistasDesbloqueadas,
     };
   } catch (error) {
     console.error("Erro ao concluir atividade:", error);
-
-    return {
-      sucesso: false,
-      erro: "Não foi possível concluir a atividade.",
-    };
+    return { sucesso: false, erro: "Não foi possível concluir a atividade." };
   }
 }
 
@@ -1937,13 +1904,7 @@ ARQUIVO: src/screens/HomeScreen.js
 import React, { useState, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import React, { useState, useCallback } from 'react';
-import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, RefreshControl,
-} from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
-
+import { verificarViradaDeDia } from '../services/Armazenamento';
 import { atividades } from '../data/atividades';
 import { getMissaoDoDia } from '../services/missao_service';
 import { registrarAtividadeCompleta } from '../services/LogicaApp';
@@ -1955,22 +1916,32 @@ export default function HomeScreen() {
   const [concluidasHoje, setConcluidasHoje] = useState([]);
   const [missaoDoDia] = useState(() => getMissaoDoDia());
   const [carregando, setCarregando] = useState(false);
-  const [feedbackId, setFeedbackId] = useState(null); // id da atividade com animação
+  const [feedbackId, setFeedbackId] = useState(null);
 
-  // atualiza a lista de concluídas sempre que a tela ganha foco
+  const carregar = useCallback(async () => {
+    const ids = await carregarAtividadesConcluidas();
+    setConcluidasHoje(ids || []);
+  }, []);
+
   useFocusEffect(
-    useCallback(() => {
-      async function carregar() {
-        const ids = await carregarAtividadesConcluidas();
-        setConcluidasHoje(ids);
-      }
-      carregar();
-    }, [])
-  );
+  useCallback(() => {
+    async function checarECarregar() {
+      // 1. O app verifica se o dia virou no armazenamento
+      const houveVirada = await verificarViradaDeDia();
+      
+      // 2. Se virou ou não, recarregamos as atividades
+      const ids = await carregarAtividadesConcluidas();
+      setConcluidasHoje(ids || []);
+      
+      // 3. Atualiza o contexto (pontos/streak) para o header refletir a mudança
+      await atualizarDadosGlobais();
+    }
+    checarECarregar();
+  }, [atualizarDadosGlobais])
+);
 
   async function handleRegistrar(atividade) {
-    if (concluidasHoje.includes(atividade.id)) return;
-    if (carregando) return;
+    if (concluidasHoje.includes(atividade.id) || carregando) return;
 
     setCarregando(true);
     const resultado = await registrarAtividadeCompleta(atividade);
@@ -1979,8 +1950,6 @@ export default function HomeScreen() {
       setFeedbackId(atividade.id);
       setConcluidasHoje(prev => [...prev, atividade.id]);
       await atualizarDadosGlobais();
-
-      // remove o feedback visual após 1.5s
       setTimeout(() => setFeedbackId(null), 1500);
     }
     setCarregando(false);
@@ -1998,18 +1967,12 @@ export default function HomeScreen() {
         <RefreshControl refreshing={carregando} colors={['#515a47']} />
       }
     >
-
-      {/* Missão do dia */}
       <View style={styles.missaoCard}>
         <Text style={styles.missaoLabel}>🎯 Missão do dia</Text>
         <Text style={styles.missaoTitulo}>{missaoDoDia.titulo}</Text>
         <Text style={styles.missaoDescricao}>{missaoDoDia.descricao}</Text>
-        <View style={styles.missaoPontosRow}>
-          <Text style={styles.missaoPontos}>+{missaoDoDia.pontos} pts se completar</Text>
-        </View>
       </View>
 
-      {/* Progresso do dia */}
       <View style={styles.progressoRow}>
         <Text style={styles.progressoTexto}>
           {concluidasHoje.length} de {atividades.length} atividades hoje
@@ -2017,51 +1980,32 @@ export default function HomeScreen() {
         <Text style={styles.progressoPontos}>+{totalHoje} pts</Text>
       </View>
       <View style={styles.barraFundo}>
-        <View style={[
-          styles.barraPreenchida,
-          { width: `${atividades.length > 0 ? (concluidasHoje.length / atividades.length) * 100 : 0}%` }
-        ]} />
+        <View style={[styles.barraPreenchida, { width: `${atividades.length > 0 ? (concluidasHoje.length / atividades.length) * 100 : 0}%` }]} />
       </View>
 
-      {/* Lista de atividades */}
       <Text style={styles.secaoTitulo}>Atividades de hoje</Text>
 
       {atividades.map(atividade => {
         const feita = concluidasHoje.includes(atividade.id);
         const feedback = feedbackId === atividade.id;
-
         return (
           <TouchableOpacity
             key={atividade.id}
-            style={[
-              styles.cartao,
-              feita && styles.cartaoFeito,
-              feedback && styles.cartaoFeedback,
-            ]}
+            style={[styles.cartao, feita && styles.cartaoFeito, feedback && styles.cartaoFeedback]}
             onPress={() => handleRegistrar(atividade)}
-            activeOpacity={feita ? 1 : 0.7}
           >
             <Text style={styles.cartaoIcone}>{atividade.icone}</Text>
             <View style={styles.cartaoInfo}>
-              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>
-                {atividade.titulo}
-              </Text>
-              <Text style={styles.cartaoDescricao}>{atividade.descricao}</Text>
+              <Text style={[styles.cartaoTitulo, feita && styles.cartaoTituloFeito]}>{atividade.titulo}</Text>
             </View>
             <View style={styles.cartaoPontosArea}>
-              {feedback ? (
-                <Text style={styles.feedbackTexto}>+{atividade.pontos}!</Text>
-              ) : feita ? (
-                <Text style={styles.checkFeito}>✓</Text>
-              ) : (
-                <Text style={styles.cartaoPontos}>+{atividade.pontos}</Text>
-              )}
+              <Text style={feita ? styles.checkFeito : styles.cartaoPontos}>
+                {feedback ? `+${atividade.pontos}!` : feita ? '✓' : `+${atividade.pontos}`}
+              </Text>
             </View>
           </TouchableOpacity>
         );
       })}
-
-      <View style={{ height: 24 }} />
     </ScrollView>
   );
 }
@@ -2069,135 +2013,25 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: '#f1f7ed' },
   container: { padding: 20 },
-
-  // Missão
-  missaoCard: {
-    backgroundColor: '#515a47',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-  },
-  missaoLabel: {
-    color: '#e0eec6',
-    fontSize: 12,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 6,
-  },
-  missaoTitulo: {
-    color: '#f1f7ed',
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 6,
-  },
-  missaoDescricao: {
-    color: '#c5d4b5',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 12,
-  },
-  missaoPontosRow: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    alignSelf: 'flex-start',
-  },
-  missaoPontos: {
-    color: '#e0eec6',
-    fontWeight: '700',
-    fontSize: 13,
-  },
-
-  // Progresso
-  progressoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
-  },
+  missaoCard: { backgroundColor: '#515a47', borderRadius: 16, padding: 20, marginBottom: 20 },
+  missaoLabel: { color: '#e0eec6', fontSize: 12, fontWeight: '700', textTransform: 'uppercase' },
+  missaoTitulo: { color: '#f1f7ed', fontSize: 20, fontWeight: 'bold' },
+  missaoDescricao: { color: '#c5d4b5', fontSize: 14 },
+  progressoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   progressoTexto: { fontSize: 13, color: '#666' },
   progressoPontos: { fontSize: 13, fontWeight: '700', color: '#7ca982' },
-  barraFundo: {
-    height: 8,
-    backgroundColor: '#e0eec6',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginBottom: 24,
-  },
-  barraPreenchida: {
-    height: '100%',
-    backgroundColor: '#7ca982',
-    borderRadius: 4,
-  },
-
-  // Seção
-  secaoTitulo: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#515a47',
-    marginBottom: 12,
-  },
-
-  // Cartão de atividade
-  cartao: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: '#e0eec6',
-  },
-  cartaoFeito: {
-    backgroundColor: '#f1f7ed',
-    borderColor: '#7ca982',
-    opacity: 0.8,
-  },
-  cartaoFeedback: {
-    borderColor: '#c2a83e',
-    backgroundColor: '#fffbe6',
-  },
-  cartaoIcone: {
-    fontSize: 28,
-    marginRight: 14,
-  },
-  cartaoInfo: {
-    flex: 1,
-  },
-  cartaoTitulo: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  cartaoTituloFeito: {
-    color: '#7ca982',
-    textDecorationLine: 'line-through',
-  },
-  cartaoDescricao: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 3,
-  },
-  cartaoPontosArea: {
-    minWidth: 44,
-    alignItems: 'center',
-  },
-  cartaoPontos: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#c2a83e',
-  },
-  checkFeito: {
-    fontSize: 20,
-    color: '#7ca982',
-    fontWeight: 'bold',
-  },
-  feedbackTexto: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#c2a83e',
-  },
+  barraFundo: { height: 8, backgroundColor: '#e0eec6', borderRadius: 4, marginBottom: 24 },
+  barraPreenchida: { height: '100%', backgroundColor: '#7ca982', borderRadius: 4 },
+  secaoTitulo: { fontSize: 16, fontWeight: '700', color: '#515a47', marginBottom: 12 },
+  cartao: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 2, borderColor: '#e0eec6' },
+  cartaoFeito: { backgroundColor: '#f1f7ed', borderColor: '#7ca982' },
+  cartaoFeedback: { borderColor: '#c2a83e', backgroundColor: '#fffbe6' },
+  cartaoIcone: { fontSize: 28, marginRight: 14 },
+  cartaoInfo: { flex: 1 },
+  cartaoTitulo: { fontSize: 15, fontWeight: '600', color: '#333' },
+  cartaoTituloFeito: { color: '#7ca982', textDecorationLine: 'line-through' },
+  cartaoPontos: { fontSize: 14, fontWeight: '700', color: '#c2a83e' },
+  checkFeito: { fontSize: 20, color: '#7ca982', fontWeight: 'bold' }
 });
 
 ----------------------------------------------------------------------
@@ -2678,6 +2512,7 @@ ARQUIVO: package.json
     "react": "^19.1.0",
     "react-dom": "19.1.0",
     "react-native": "^0.81.5",
+    "react-native-animatable": "^1.4.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
     "react-native-web": "^0.21.0"

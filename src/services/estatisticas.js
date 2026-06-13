@@ -1,4 +1,4 @@
-// scr/services/estatisticas.js
+// src/services/estatisticas.js
 
 import {
   carregarHistorico,

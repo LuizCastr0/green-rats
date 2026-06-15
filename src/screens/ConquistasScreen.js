@@ -4,6 +4,7 @@ import React, { useState, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, StyleSheet,
   TouchableOpacity, ActivityIndicator, Alert, Platform,
+  Linking // 🌐 Importado para abrir links externos
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { captureRef } from 'react-native-view-shot';
@@ -18,7 +19,7 @@ import {
   carregarStreak,
 } from '../services/Armazenamento';
 
-// ✅ CORREÇÃO: era 'listaAtividades', o export correto é 'atividades'
+// ✅ Export correto de atividades
 import { atividades } from '../data/atividades';
 
 // mapa id -> carbonoKg para lookup rápido
@@ -39,6 +40,21 @@ export default function ConquistasScreen() {
   const { nome, nivel } = useUser();
   const cardRef = useRef(null);
   const [compartilhando, setCompartilhando] = useState(false);
+
+  const LINK_GOOGLE_FORMS = "https://forms.gle/bYsZA8CnHcWP6Fdb7";
+
+  const handleOpenForms = async () => {
+    try {
+      const suportado = await Linking.canOpenURL(LINK_GOOGLE_FORMS);
+      if (suportado) {
+        await Linking.openURL(LINK_GOOGLE_FORMS);
+      } else {
+        Alert.alert("Ops!", "Não foi possível abrir o link do formulário.");
+      }
+    } catch (error) {
+      console.error("Erro ao abrir formulário:", error);
+    }
+  };
 
   const handleCompartilhar = async () => {
     if (Platform.OS === 'web') {
@@ -79,9 +95,9 @@ export default function ConquistasScreen() {
           return acc;
         }, 0);
 
-        setConquistasGanhas(cg.ganhas || []);
-        setHistorico(h);
-        setPontos(p);
+        setConquistasGanhas(cg?.ganhas || []);
+        setHistorico(h || []);
+        setPontos(p || 0);
         setStreak(s?.contagem || 0);
         setTotalCarbono(carbono);
       }
@@ -90,7 +106,9 @@ export default function ConquistasScreen() {
   );
 
   const acoesPorNome = historico.reduce((acc, item) => {
-    acc[item.acao] = (acc[item.acao] || 0) + 1;
+    if (item && item.acao) {
+      acc[item.acao] = (acc[item.acao] || 0) + 1;
+    }
     return acc;
   }, {});
 
@@ -153,6 +171,22 @@ export default function ConquistasScreen() {
           </Text>
         )}
       </View>
+
+      {/* ✨ Card Interativo do Google Forms */}
+      <TouchableOpacity 
+        style={styles.formsCard} 
+        onPress={handleOpenForms}
+        activeOpacity={0.85}
+      >
+        <View style={styles.formsIconeContainer}>
+          <Text style={styles.formsIcone}>📝</Text>
+        </View>
+        <View style={styles.formsInfo}>
+          <Text style={styles.formsTitulo}>Pesquisa Green Rats</Text>
+          <Text style={styles.formsDescricao}>Ajude a melhorar nossa jornada sustentável respondendo ao formulário!</Text>
+        </View>
+        <Text style={styles.formsSeta}>➔</Text>
+      </TouchableOpacity>
 
       {/* Conquistas */}
       <Text style={styles.secaoTitulo}>
@@ -267,6 +301,33 @@ export default function ConquistasScreen() {
 const styles = StyleSheet.create({
   scroll: { backgroundColor: '#f1f7ed' },
   container: { padding: 20 },
+
+  formsCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 24,
+    borderWidth: 1.5,
+    borderColor: '#7ca982',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  formsIconeContainer: {
+    backgroundColor: 'rgba(124, 169, 130, 0.15)',
+    borderRadius: 10,
+    padding: 10,
+    marginRight: 14,
+  },
+  formsIcone: { fontSize: 22 },
+  formsInfo: { flex: 1 },
+  formsTitulo: { fontSize: 15, fontWeight: '700', color: '#333' },
+  formsDescricao: { fontSize: 12, color: '#666', marginTop: 2, lineHeight: 16 },
+  formsSeta: { fontSize: 16, color: '#7ca982', fontWeight: 'bold', marginLeft: 8 },
 
   relatorioCard: {
     backgroundColor: '#515a47',

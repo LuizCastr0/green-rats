@@ -1,17 +1,32 @@
 {
   "expo": {
-    "extra": {
-      "eas": {
-        "projectId": "a464c291-4532-499b-aa71-d70ba2eb49ca"
-      }
-    },
-    "android": {
-      "package": "com.frooidss.greenrats"
+    "name": "Green Rats",
+    "slug": "green-rats",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f1f7ed"
     },
     "ios": {
       "bundleIdentifier": "com.frooidss.greenrats",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.frooidss.greenrats",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#515a47"
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "a464c291-4532-499b-aa71-d70ba2eb49ca"
       }
     }
   }

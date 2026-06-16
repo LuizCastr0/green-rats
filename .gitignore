@@ -9,7 +9,8 @@ yarn-error.log*
 .DS_Store
 Thumbs.db
 .vscode/
-package-lock.json
-eas.json
-package.json
 
+
+
+node_modules
+node_modules

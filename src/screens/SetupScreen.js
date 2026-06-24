@@ -1,29 +1,32 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
-  View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, Alert,
-} from 'react-native';
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  StyleSheet,
+  Alert,
+} from "react-native";
 
-import { atividades } from '../data/atividades';
-import { salvarNovoProgresso } from '../services/Armazenamento';
-import { useUser } from '../context/UserContext';
+import { atividades } from "../data/atividades";
+import { salvarNovoProgresso } from "../services/Armazenamento";
+import { useUser } from "../context/UserContext";
 
 export default function SetupScreen({ navigation }) {
-  const [nome, setNome] = useState('');
+  const [nome, setNome] = useState("");
   const [selecionadas, setSelecionadas] = useState([]);
   const { atualizarDadosGlobais } = useUser();
 
   function toggleAtividade(id) {
-    setSelecionadas(atual =>
-      atual.includes(id)
-        ? atual.filter(x => x !== id)
-        : [...atual, id]
+    setSelecionadas((atual) =>
+      atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id],
     );
   }
 
   async function confirmar() {
     if (!nome.trim()) {
-      Alert.alert('Faltou o nome!', 'Digite seu nome para continuar.');
+      Alert.alert("Faltou o nome!", "Digite seu nome para continuar.");
       return;
     }
 
@@ -36,12 +39,11 @@ export default function SetupScreen({ navigation }) {
     });
 
     await atualizarDadosGlobais();
-    navigation.replace('Main');
+    navigation.replace("Main");
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-
       {/* Cabeçalho */}
       <View style={styles.header}>
         <Text style={styles.titulo}>GreenRats 🌱</Text>
@@ -50,7 +52,7 @@ export default function SetupScreen({ navigation }) {
 
       {/* Campo de nome */}
       <View style={styles.secao}>
-        <Text style={styles.label}>Como você se chama?</Text>
+        <Text style={styles.label}>Qual seu nome?</Text>
         <TextInput
           style={styles.input}
           placeholder="Seu nome aqui..."
@@ -63,25 +65,40 @@ export default function SetupScreen({ navigation }) {
 
       {/* Seleção de atividades */}
       <View style={styles.secao}>
-        <Text style={styles.label}>O que você costuma fazer?</Text>
-        <Text style={styles.dica}>Toque nas atividades que já fazem parte da sua rotina.</Text>
+        <Text style={styles.label}>Quais atividades você costuma fazer?</Text>
+        <Text style={styles.dica}>
+          Toque nas atividades que já fazem parte da sua rotina.
+        </Text>
 
         <View style={styles.grade}>
-          {atividades.map(atividade => {
+          {atividades.map((atividade) => {
             const marcada = selecionadas.includes(atividade.id);
             return (
               <TouchableOpacity
                 key={atividade.id}
-                style={[styles.cartaoAtividade, marcada && styles.cartaoMarcado]}
+                style={[
+                  styles.cartaoAtividade,
+                  marcada && styles.cartaoMarcado,
+                ]}
                 onPress={() => toggleAtividade(atividade.id)}
                 activeOpacity={0.7}
               >
                 <Text style={styles.iconeAtividade}>{atividade.icone}</Text>
-                <Text style={[styles.tituloAtividade, marcada && styles.tituloMarcado]}>
+                <Text
+                  style={[
+                    styles.tituloAtividade,
+                    marcada && styles.tituloMarcado,
+                  ]}
+                >
                   {atividade.titulo}
                 </Text>
-                <Text style={[styles.pontosAtividade, marcada && styles.pontosMarcado]}>
-                  +{atividade.pontos} pts
+                <Text
+                  style={[
+                    styles.pontosAtividade,
+                    marcada && styles.pontosMarcado,
+                  ]}
+                >
+                  {atividade.pontos} pts
                 </Text>
                 {marcada && (
                   <View style={styles.checkMark}>
@@ -107,21 +124,21 @@ export default function SetupScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     padding: 24,
-    backgroundColor: '#f1f7ed',
+    backgroundColor: "#f1f7ed",
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 60,
     marginBottom: 32,
   },
   titulo: {
     fontSize: 36,
-    fontWeight: 'bold',
-    color: '#515a47',
+    fontWeight: "bold",
+    color: "#515a47",
   },
   subtitulo: {
     fontSize: 16,
-    color: '#7ca982',
+    color: "#7ca982",
     marginTop: 6,
   },
   secao: {
@@ -129,42 +146,42 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#515a47',
+    fontWeight: "700",
+    color: "#515a47",
     marginBottom: 6,
   },
   dica: {
     fontSize: 14,
-    color: '#888',
+    color: "#888",
     marginBottom: 16,
   },
   input: {
-    backgroundColor: '#fff',
+    backgroundColor: "#fff",
     borderRadius: 12,
     padding: 16,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#e0eec6',
-    color: '#333',
+    borderColor: "#e0eec6",
+    color: "#333",
   },
   grade: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    flexDirection: "row",
+    flexWrap: "wrap",
     gap: 12,
   },
   cartaoAtividade: {
-    width: '47%',
-    backgroundColor: '#fff',
+    width: "47%",
+    backgroundColor: "#fff",
     borderRadius: 14,
     padding: 16,
     borderWidth: 2,
-    borderColor: '#e0eec6',
-    alignItems: 'center',
-    position: 'relative',
+    borderColor: "#e0eec6",
+    alignItems: "center",
+    position: "relative",
   },
   cartaoMarcado: {
-    backgroundColor: '#e0eec6',
-    borderColor: '#7ca982',
+    backgroundColor: "#e0eec6",
+    borderColor: "#7ca982",
   },
   iconeAtividade: {
     fontSize: 28,
@@ -172,48 +189,48 @@ const styles = StyleSheet.create({
   },
   tituloAtividade: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#444',
-    textAlign: 'center',
+    fontWeight: "600",
+    color: "#444",
+    textAlign: "center",
   },
   tituloMarcado: {
-    color: '#515a47',
+    color: "#515a47",
   },
   pontosAtividade: {
     fontSize: 12,
-    color: '#aaa',
+    color: "#aaa",
     marginTop: 4,
   },
   pontosMarcado: {
-    color: '#7ca982',
-    fontWeight: '700',
+    color: "#7ca982",
+    fontWeight: "700",
   },
   checkMark: {
-    position: 'absolute',
+    position: "absolute",
     top: 8,
     right: 8,
-    backgroundColor: '#7ca982',
+    backgroundColor: "#7ca982",
     borderRadius: 10,
     width: 20,
     height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   checkTexto: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   botao: {
-    backgroundColor: '#515a47',
+    backgroundColor: "#515a47",
     padding: 18,
     borderRadius: 14,
-    alignItems: 'center',
+    alignItems: "center",
     marginTop: 8,
   },
   botaoTexto: {
-    color: '#f1f7ed',
+    color: "#f1f7ed",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
 });
